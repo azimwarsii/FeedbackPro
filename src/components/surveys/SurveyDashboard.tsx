@@ -10,7 +10,6 @@ import {
   BarChart3, 
   Copy, 
   Trash2, 
-  Eye,
   Play,
   Pause,
   CheckCircle,
@@ -21,7 +20,6 @@ import {
   Target,
   TrendingUp,
   Star,
-  MessageSquare
 } from "lucide-react";
 
 type SurveyStatus = "Active" | "Paused" | "Completed" | "Draft";
@@ -156,7 +154,6 @@ const quickStartTemplates: Template[] = [
 ];
 
 export default function Surveys() {
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -393,8 +390,6 @@ export default function Surveys() {
           <div 
             key={survey.id} 
             className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 dark:border-gray-700 dark:bg-gray-800 hover:scale-[1.02]"
-            onMouseEnter={() => setHoveredCard(survey.id)}
-            onMouseLeave={() => setHoveredCard(null)}
           >
             {/* Menu Button */}
             <div className="absolute top-4 right-4" ref={menuRef}>

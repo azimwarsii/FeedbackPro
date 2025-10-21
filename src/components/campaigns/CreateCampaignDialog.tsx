@@ -5,8 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import InputField from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import { ShootingStarIcon } from "@/icons";
-import { Plus, ChevronUp, ChevronDown, Copy, Trash2, DollarSign, Users, FileText, MessageSquare, Mail, ArrowUp, ArrowDown, User, Search, File, CheckCircle, Gift, Upload, Sparkles, Filter, X, Eye, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Copy, Trash2, DollarSign, Users, FileText, MessageSquare, Mail, ArrowUp, ArrowDown, User, Search, File, CheckCircle, Gift, Upload, Sparkles, Filter, X, Eye, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface LogicRule {
   id: string;
@@ -517,7 +516,7 @@ export function CreateCampaignDialog() {
                             <FileText className="w-8 h-8" />
                           </div>
                           <p className="font-medium">No questions yet</p>
-                          <p className="text-sm">Click "Add Question" to get started</p>
+                          <p className="text-sm">Click &quot;Add Question&quot; to get started</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -661,7 +660,7 @@ export function CreateCampaignDialog() {
                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Rule {index + 1}</span>
                                         {rule.value && rule.action && (
                                           <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                                            If answer {rule.condition} "{rule.value}" then {rule.action} 
+                                            If answer {rule.condition} &quot;{rule.value}&quot; then {rule.action} 
                                             {rule.targetQuestionId && ` Question ${getQuestionNumber(rule.targetQuestionId)}`}
                                           </span>
                                         )}
@@ -838,7 +837,7 @@ export function CreateCampaignDialog() {
                                 {surveyData.questions[currentPreviewQuestion].logicRules.map((rule, ruleIndex) => (
                                   <span key={rule.id} className="ml-1">
                                     {ruleIndex > 0 && ", "}
-                                    {rule.condition} "{rule.value}" → {rule.action}
+                                    {rule.condition} &quot;{rule.value}&quot; → {rule.action}
                                     {rule.action === "skip_to" && rule.targetQuestionId && (
                                       <span> (Q{getQuestionNumber(rule.targetQuestionId)})</span>
                                     )}

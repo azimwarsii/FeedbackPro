@@ -5,9 +5,7 @@ import {
   X, 
   Check, 
   Calendar,
-  DollarSign,
   Shield,
-  Clock,
   AlertCircle
 } from "lucide-react";
 

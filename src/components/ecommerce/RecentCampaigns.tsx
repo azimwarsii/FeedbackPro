@@ -1,8 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import Badge from "../ui/badge/Badge";
-import { GroupIcon, DollarLineIcon, CalenderIcon, HorizontaLDots, ArrowRightIcon, UserIcon, PieChartIcon, TimeIcon, BoxIcon } from "@/icons";
-import { Users, DollarSign, Calendar, MoreHorizontal, ArrowRight, BarChart3, Clock, Wallet, Plus, Download, RefreshCw } from "lucide-react";
+import { Users, DollarSign, Calendar, MoreHorizontal, Plus, Download, RefreshCw } from "lucide-react";
 
 // Define the TypeScript interface for campaign data
 interface Campaign {
@@ -51,7 +50,6 @@ const campaignData: Campaign[] = [
 ];
 
 export default function RecentCampaigns() {
-  const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -137,8 +135,6 @@ export default function RecentCampaigns() {
           <div
             key={campaign.id}
             className="relative rounded-xl border border-gray-200 bg-white p-5 shadow-theme-sm hover:shadow-theme-md transition-all duration-300 dark:border-gray-800 dark:bg-white/[0.03] hover:scale-[1.02] group"
-            onMouseEnter={() => setHoveredCard(campaign.id)}
-            onMouseLeave={() => setHoveredCard(null)}
           >
             {/* Menu Button */}
             <div className="absolute top-4 right-4" ref={menuRef}>

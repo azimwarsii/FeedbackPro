@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
 import React, { useState, useEffect, useRef } from "react";
-import { ShootingStarIcon } from "@/icons";
 import { CreateCampaignDialog } from "./CreateCampaignDialog";
 import { MoreHorizontal, Edit, BarChart3, Copy, Trash2, Users, DollarSign, Calendar, Plus, Download, RefreshCw, Search, Filter, ChevronDown } from "lucide-react";
 
@@ -84,20 +82,8 @@ const mockCampaigns: Campaign[] = [
   },
 ];
 
-function ProgressBar({ value, max }: { value: number; max: number }) {
-  const percent = Math.min(100, Math.round((value / max) * 100));
-  return (
-    <div className="mt-4 h-2 w-full rounded-full bg-zinc-200 dark:bg-zinc-700">
-      <div
-        className="h-2 rounded-full bg-violet-500"
-        style={{ width: `${percent}%` }}
-      />
-    </div>
-  );
-}
 
 export default function Campaigns() {
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -259,8 +245,6 @@ export default function Campaigns() {
             <div 
               key={c.id} 
               className="relative rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 dark:border-gray-700 dark:bg-gray-800 hover:scale-[1.02] group"
-              onMouseEnter={() => setHoveredCard(c.id)}
-              onMouseLeave={() => setHoveredCard(null)}
             >
               {/* Menu Button */}
               <div className="absolute top-4 right-4" ref={menuRef}>

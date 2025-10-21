@@ -4,11 +4,7 @@ import React, { useState } from "react";
 import { 
   Plus, 
   Save, 
-  Settings, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  GripVertical,
+  Trash2,
   ArrowLeft,
   Type,
   FileText,
@@ -21,8 +17,6 @@ import {
   Hash,
   ToggleLeft,
   ToggleRight,
-  Copy,
-  Move,
   ChevronDown,
   ChevronUp,
   Filter,
@@ -597,7 +591,7 @@ export default function CreateSurvey() {
                                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Rule {index + 1}</span>
                                       {rule.value && rule.action && (
                                         <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                                          If answer {rule.condition} "{rule.value}" then {rule.action} 
+                                          If answer {rule.condition} &quot;{rule.value}&quot; then {rule.action} 
                                           {rule.targetQuestion && ` Question ${getQuestionNumber(rule.targetQuestion)}`}
                                         </span>
                                       )}

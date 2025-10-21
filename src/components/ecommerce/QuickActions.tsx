@@ -1,7 +1,6 @@
 "use client";
 import React from "react";
-import { PlusIcon, ChatIcon, DollarLineIcon, PieChartIcon, UserIcon, BoxIcon, TimeIcon, ShootingStarIcon } from "@/icons";
-import { Sparkles, FileText, Wallet, BarChart3, Plus, Download, RefreshCw } from "lucide-react";
+import { Sparkles, FileText, Wallet, BarChart3, Download, RefreshCw } from "lucide-react";
 
 export default function QuickActions() {
   return (

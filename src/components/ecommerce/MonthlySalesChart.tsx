@@ -1,7 +1,6 @@
 "use client";
 import { ApexOptions } from "apexcharts";
 import dynamic from "next/dynamic";
-import { MoreDotIcon } from "@/icons";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { useState } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
@@ -99,9 +98,6 @@ export default function MonthlySalesChart() {
   ];
   const [isOpen, setIsOpen] = useState(false);
 
-  function toggleDropdown() {
-    setIsOpen(!isOpen);
-  }
 
   function closeDropdown() {
     setIsOpen(false);
