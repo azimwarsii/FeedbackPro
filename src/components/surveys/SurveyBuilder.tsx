@@ -275,18 +275,18 @@ export default function CreateSurvey() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Top Bar */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button  className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Survey Builder</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Create and customize your survey</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Survey Builder</h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Create and customize your survey</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
               <Eye className="w-4 h-4" />
               Preview
@@ -295,19 +295,20 @@ export default function CreateSurvey() {
               <Settings className="w-4 h-4" />
               Settings
             </button> */}
-            <button className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
+            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
               <Save className="w-4 h-4" />
-              Save Survey
+              <span className="hidden sm:inline">Save Survey</span>
+              <span className="sm:hidden">Save</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-80px)]">
+      <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)]">
         {/* Left Sidebar */}
-        <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        <div className="w-full lg:w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
           {/* Tabs */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
               <button
                 onClick={() => setActiveTab("builder")}
@@ -333,23 +334,23 @@ export default function CreateSurvey() {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4">
             {activeTab === "builder" ? (
               <div className="space-y-6">
                 {/* Question Types */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Question Types</h3>
-                  <div className="grid grid-cols-1 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
                     {questionTypes.map((type) => (
                       <button
                         key={type.id}
                         onClick={() => addQuestion(type.id as QuestionType)}
-                        className="flex items-center gap-3 p-3 text-left text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                        className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 text-left text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                       >
                         <div className="text-purple-600 dark:text-purple-400">{type.icon}</div>
-                        <div className="flex-1">
-                          <div className="font-medium">{type.label}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">{type.description}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm sm:text-base truncate">{type.label}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">{type.description}</div>
                         </div>
                       </button>
                     ))}
@@ -359,11 +360,11 @@ export default function CreateSurvey() {
                 {/* Questions List */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Questions ({survey.questions.length})</h3>
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-60 lg:max-h-none overflow-y-auto">
                     {survey.questions.map((question, index) => (
                       <div
                         key={question.id}
-                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                        className={`p-2 sm:p-3 rounded-lg border cursor-pointer transition-colors ${
                           selectedQuestion?.id === question.id
                             ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
                             : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
@@ -460,11 +461,11 @@ export default function CreateSurvey() {
         </div>
 
         {/* Middle Section - Question Settings */}
-        <div className="flex-1 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex-1 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-4 sm:p-6">
           {selectedQuestion ? (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Question Settings</h2>
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Question Settings</h2>
                 
                 <div className="space-y-4">
                   <div>
@@ -707,15 +708,15 @@ export default function CreateSurvey() {
         </div>
 
         {/* Right Section - Survey Preview */}
-        <div className="w-96 bg-gray-50 dark:bg-gray-900 p-6">
+        <div className="w-full lg:w-96 bg-gray-50 dark:bg-gray-900 p-4 sm:p-6">
           <div className="sticky top-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Live Preview</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Live Preview</h3>
             
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6">
               {/* Survey Header */}
               <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{survey.title}</h2>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">{survey.description}</p>
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2 break-words">{survey.title}</h2>
+                <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 break-words">{survey.description}</p>
                 
                 {/* Progress Bar */}
                 <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
@@ -744,12 +745,12 @@ export default function CreateSurvey() {
                 ) : (
                   <div className="space-y-3">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1 break-words">
                         {survey.questions[currentPreviewQuestion].title}
                         {survey.questions[currentPreviewQuestion].required && <span className="text-red-500 ml-1">*</span>}
                       </h3>
                       {survey.questions[currentPreviewQuestion].description && (
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">{survey.questions[currentPreviewQuestion].description}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 break-words">{survey.questions[currentPreviewQuestion].description}</p>
                       )}
                     </div>
                     {renderQuestionPreview(survey.questions[currentPreviewQuestion])}
@@ -759,26 +760,28 @@ export default function CreateSurvey() {
 
               {/* Navigation Buttons */}
               {survey.questions.length > 0 && (
-                <div className="flex justify-between mt-8">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-8">
                   <button 
                     onClick={prevPreviewQuestion}
                     disabled={currentPreviewQuestion === 0}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    Previous
+                    <span className="hidden sm:inline">Previous</span>
+                    <span className="sm:hidden">Prev</span>
                   </button>
                   
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400 order-first sm:order-none">
                     <span>Question {currentPreviewQuestion + 1} of {survey.questions.length}</span>
                   </div>
                   
                   <button 
                     onClick={nextPreviewQuestion}
                     disabled={currentPreviewQuestion === survey.questions.length - 1}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-purple-700 rounded-lg hover:from-purple-600 hover:to-purple-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-purple-700 rounded-lg hover:from-purple-600 hover:to-purple-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                   >
-                    Next
+                    <span className="hidden sm:inline">Next</span>
+                    <span className="sm:hidden">Next</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>

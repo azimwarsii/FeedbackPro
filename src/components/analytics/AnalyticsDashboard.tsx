@@ -360,47 +360,52 @@ export default function Analytics() {
           {/* Enhanced Header Section */}
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h2>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h2>
+              <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
                 Track performance metrics and gain insights into your survey campaigns
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setDetailedView(!detailedView)}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  detailedView 
-                    ? "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400" 
-                    : "text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                <Eye className="w-4 h-4" />
-                {detailedView ? "Detailed View" : "Summary View"}
-              </button>
-              
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white appearance-none min-w-[140px]"
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setDetailedView(!detailedView)}
+                  className={`inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none ${
+                    detailedView 
+                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400" 
+                      : "text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  }`}
                 >
-                  <option value="Last 7 days">Last 7 days</option>
-                  <option value="Last 30 days">Last 30 days</option>
-                  <option value="Last 3 months">Last 3 months</option>
-                  <option value="Last year">Last year</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
+                  <Eye className="w-4 h-4" />
+                  <span className="hidden sm:inline">{detailedView ? "Detailed View" : "Summary View"}</span>
+                  <span className="sm:hidden">{detailedView ? "Detailed" : "Summary"}</span>
+                </button>
+                
+                <div className="relative flex-1 sm:flex-none">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white appearance-none text-xs sm:text-sm"
+                  >
+                    <option value="Last 7 days">Last 7 days</option>
+                    <option value="Last 30 days">Last 30 days</option>
+                    <option value="Last 3 months">Last 3 months</option>
+                    <option value="Last year">Last year</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
 
-              <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
+                <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+                  <RefreshCw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Refresh</span>
+                  <span className="sm:hidden">Refresh</span>
+                </button>
+              </div>
               
-              <button className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
+              <button className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
                 <Download className="w-4 h-4" />
-                Export Report
+                <span className="hidden sm:inline">Export Report</span>
+                <span className="sm:hidden">Export</span>
               </button>
             </div>
           </div>
@@ -410,47 +415,52 @@ export default function Analytics() {
           {/* Detailed Analytics Header */}
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Detailed User Analytics & Bot Detection</h2>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Detailed User Analytics & Bot Detection</h2>
+              <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
                 Comprehensive user behavior analysis and fraud detection insights
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setDetailedView(!detailedView)}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  detailedView 
-                    ? "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400" 
-                    : "text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                <Eye className="w-4 h-4" />
-                {detailedView ? "Detailed View" : "Summary View"}
-              </button>
-              
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white appearance-none min-w-[140px]"
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setDetailedView(!detailedView)}
+                  className={`inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors flex-1 sm:flex-none ${
+                    detailedView 
+                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400" 
+                      : "text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  }`}
                 >
-                  <option value="Last 7 days">Last 7 days</option>
-                  <option value="Last 30 days">Last 30 days</option>
-                  <option value="Last 3 months">Last 3 months</option>
-                  <option value="Last year">Last year</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              </div>
+                  <Eye className="w-4 h-4" />
+                  <span className="hidden sm:inline">{detailedView ? "Detailed View" : "Summary View"}</span>
+                  <span className="sm:hidden">{detailedView ? "Detailed" : "Summary"}</span>
+                </button>
+                
+                <div className="relative flex-1 sm:flex-none">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white appearance-none text-xs sm:text-sm"
+                  >
+                    <option value="Last 7 days">Last 7 days</option>
+                    <option value="Last 30 days">Last 30 days</option>
+                    <option value="Last 3 months">Last 3 months</option>
+                    <option value="Last year">Last year</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
 
-              <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
+                <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+                  <RefreshCw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Refresh</span>
+                  <span className="sm:hidden">Refresh</span>
+                </button>
+              </div>
               
-              <button className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
+              <button className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
                 <Download className="w-4 h-4" />
-                Export Report
+                <span className="hidden sm:inline">Export Report</span>
+                <span className="sm:hidden">Export</span>
               </button>
             </div>
           </div>

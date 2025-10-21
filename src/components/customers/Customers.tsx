@@ -178,7 +178,7 @@ export default function Customers() {
   return (
     <div className="space-y-6">
       {/* Enhanced Header Section */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      {/* <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Customers</h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
@@ -198,6 +198,37 @@ export default function Customers() {
             <Mail className="w-4 h-4" />
             Send Campaign
             </button>
+        </div>
+      </div> */}
+      {/* Header Section */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Customers</h2>
+          <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
+            Manage your customer base and track engagement metrics
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
+            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+              <RefreshCw className="w-4 h-4" />
+              <span className="hidden sm:inline">Refresh</span>
+              <span className="sm:hidden">Refresh</span>
+            </button>
+            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+              <span className="sm:hidden">Export</span>
+            </button>
+          </div>
+          <button 
+            onClick={() => window.location.href = '/customers/create'}
+            className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base"
+          >
+            <Mail className="w-4 h-4" />
+            <span className="hidden sm:inline">Send Campaign</span>
+            <span className="sm:hidden">Send Campaign</span>
+          </button>
         </div>
       </div>
 
