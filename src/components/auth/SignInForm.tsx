@@ -4,8 +4,10 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
+import { Sparkles, Shield, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import React, { useState } from "react";
+import { signIn } from "next-auth/react";
 
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -23,17 +25,54 @@ export default function SignInForm() {
       </div>
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div>
-          <div className="mb-5 sm:mb-8">
-            <h1 className="mb-2 font-semibold text-gray-800 text-title-sm dark:text-white/90 sm:text-title-md">
-              Sign In
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your email and password to sign in!
-            </p>
+          <div className="mb-6 sm:mb-8">
+            <div className="relative mb-6">
+              <div className="flex items-start gap-4">
+                <div className="relative flex-shrink-0">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 dark:from-brand-600 dark:to-brand-700 shadow-lg shadow-brand-500/20 dark:shadow-brand-500/10">
+                    <Sparkles className="w-8 h-8 text-white" strokeWidth={2.5} />
+                  </div>
+                  <div className="absolute -top-1 -right-1 flex items-center justify-center w-6 h-6 rounded-full bg-green-500 border-2 border-white dark:border-gray-900">
+                    <Shield className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                  </div>
+                </div>
+                <div className="flex-1 pt-1">
+                  <h1 className="mb-2 font-bold text-gray-900 text-title-md dark:text-white sm:text-title-lg">
+                    Sign In to FeedbackPro
+                  </h1>
+                  <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                    Access your dashboard and start collecting valuable feedback from your customers. Sign in securely to continue your journey.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-gradient-to-r from-brand-50 to-purple-50 dark:from-brand-900/20 dark:to-purple-900/20 border border-brand-100 dark:border-brand-800/50">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+                  <Shield className="w-4 h-4 text-brand-600 dark:text-brand-400" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">
+                    Secure Authentication
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Your data is protected
+                  </p>
+                </div>
+              </div>
+              <div className="hidden sm:block w-px h-8 bg-gray-300 dark:bg-gray-700"></div>
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <ArrowRight className="w-4 h-4 text-brand-600 dark:text-brand-400" strokeWidth={2.5} />
+                <p className="text-xs text-gray-700 dark:text-gray-300">
+                  Quick sign in with Google available
+                </p>
+              </div>
+            </div>
           </div>
           <div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
-              <button className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-1 sm:gap-5">
+              <button onClick={() => signIn("google")} className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
                 <svg
                   width="20"
                   height="20"
@@ -60,21 +99,8 @@ export default function SignInForm() {
                 </svg>
                 Sign in with Google
               </button>
-              <button className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
-                <svg
-                  width="21"
-                  className="fill-current"
-                  height="20"
-                  viewBox="0 0 21 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path d="M15.6705 1.875H18.4272L12.4047 8.75833L19.4897 18.125H13.9422L9.59717 12.4442L4.62554 18.125H1.86721L8.30887 10.7625L1.51221 1.875H7.20054L11.128 7.0675L15.6705 1.875ZM14.703 16.475H16.2305L6.37054 3.43833H4.73137L14.703 16.475Z" />
-                </svg>
-                Sign in with X
-              </button>
             </div>
-            <div className="relative py-3 sm:py-5">
+            {/* <div className="relative py-3 sm:py-5">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-200 dark:border-gray-800"></div>
               </div>
@@ -83,8 +109,8 @@ export default function SignInForm() {
                   Or
                 </span>
               </div>
-            </div>
-            <form>
+            </div> */}
+            {/* <form>
               <div className="space-y-6">
                 <div>
                   <Label>
@@ -133,9 +159,9 @@ export default function SignInForm() {
                   </Button>
                 </div>
               </div>
-            </form>
+            </form> */}
 
-            <div className="mt-5">
+            {/* <div className="mt-5">
               <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
                 Don&apos;t have an account? {""}
                 <Link
@@ -145,7 +171,7 @@ export default function SignInForm() {
                   Sign Up
                 </Link>
               </p>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

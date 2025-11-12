@@ -453,16 +453,6 @@ export function CreateCampaignDialog() {
                       className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="campaign-budget">Campaign Budget</Label>
-                    <InputField
-                      id="campaign-budget"
-                      type="number"
-                      placeholder="1000"
-                      defaultValue={campaignData.budget}
-                      onChange={(e) => setCampaignData(prev => ({ ...prev, budget: e.target.value }))}
-                    />
-                  </div>
                 </div>
               </div>
             </div>

@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useSurveysStore } from "../../store/useSurveysStore";
 import { 
   Plus, 
   Save, 
@@ -52,6 +55,8 @@ interface Survey {
   description: string;
   questions: Question[];
   thankYouMessage: string;
+  goal : string;
+  user : string;
 }
 
 const questionTypes = [
@@ -71,11 +76,16 @@ export default function CreateSurvey() {
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
   const [showLogic, setShowLogic] = useState(false);
   const [currentPreviewQuestion, setCurrentPreviewQuestion] = useState(0);
+  const { data: session } = useSession();
+  const userId = (session as any)?.user?.id;
+  const { addSurvey } = useSurveysStore();
   const [survey, setSurvey] = useState<Survey>({
     title: "Untitled Survey",
     description: "Survey description",
     questions: [],
-    thankYouMessage: "Thank you for your feedback!"
+    thankYouMessage: "Thank you for your feedback!",
+    goal: "Goal",
+    user: userId
   });
 
   const addQuestion = (type: QuestionType) => {
@@ -210,6 +220,72 @@ export default function CreateSurvey() {
     return index + 1;
   };
 
+  const handleSave = async () => {
+    try {
+
+      if (!survey.title || survey.title.trim() === "") {
+        alert("Please enter a survey title");
+        return;
+      }
+
+      const baseUrl = process.env.BACKEND_URL || "http://localhost:5000";
+      if (!baseUrl) {
+        console.error("BACKEND_URL");
+        alert("API configuration error. Please contact support.");
+        return;
+      }
+
+      const endpoint = `${baseUrl.replace(/\/+$/, "")}/surveys`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: survey.user || userId,
+          title: survey.title,
+          description: survey.description || "",
+          questions: survey.questions || [],
+          thankYouMessage: survey.thankYouMessage || "",
+          goal: survey.goal || "",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Failed to save survey", errorData);
+        alert(`Failed to save survey: ${errorData.error || response.statusText}`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log("Survey saved successfully", data);
+      
+      // Add survey to store
+      const savedSurvey = data.survey || data;
+      if (savedSurvey) {
+        addSurvey({
+          title: savedSurvey.title || survey.title,
+          description: savedSurvey.description || survey.description,
+          questions: savedSurvey.questions || survey.questions,
+          thankYouMessage: savedSurvey.thankYouMessage || survey.thankYouMessage,
+          goal: savedSurvey.goal || survey.goal,
+          user: savedSurvey.user || survey.user || userId,
+          _id: savedSurvey._id,
+          status: savedSurvey.status || "draft",
+          responses: savedSurvey.responses || 0,
+          createdAt: savedSurvey.createdAt,
+          updatedAt: savedSurvey.updatedAt,
+        });
+      }
+      
+      alert("Survey saved successfully!");
+    } catch (error) {
+      console.error("Error saving survey:", error);
+      alert("An error occurred while saving the survey. Please try again.");
+    }
+  };
+
   const renderQuestionPreview = (question: Question) => {
     const baseClasses = "w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white";
     
@@ -278,9 +354,9 @@ export default function CreateSurvey() {
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-4">
-            <button  className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+            <Link href='/surveys'  className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
               <ArrowLeft className="w-5 h-5" />
-            </button>
+            </Link>
             <div className="min-w-0 flex-1">
               <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Survey Builder</h1>
               <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Create and customize your survey</p>
@@ -295,7 +371,10 @@ export default function CreateSurvey() {
               <Settings className="w-4 h-4" />
               Settings
             </button> */}
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
+            <button 
+              onClick={handleSave}
+              className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base"
+            >
               <Save className="w-4 h-4" />
               <span className="hidden sm:inline">Save Survey</span>
               <span className="sm:hidden">Save</span>
@@ -420,6 +499,21 @@ export default function CreateSurvey() {
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Survey Settings</h3>
                   <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Goal
+                      </label>
+                      <select
+                        value={survey.goal}
+                        onChange={(e) => setSurvey(prev => ({ ...prev, goal: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                      >
+                        <option value="">Select a goal...</option>
+                        <option value="product feedback">Product Feedback</option>
+                        <option value="market research">Market Research</option>
+                        <option value="customer satisfaction">Customer Satisfaction</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Survey Title
@@ -648,7 +742,9 @@ export default function CreateSurvey() {
                                   </div>
 
                                   {/* Target Question Selection - Only show for hide and jump_to actions */}
-                                  {(rule.action === "hide" || rule.action === "jump_to") && (
+                                  {
+                                  //(rule.action === "hide" || rule.action === "jump_to") && 
+                                  (
                                     <div className="mt-3">
                                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                                         {rule.action === "hide" ? "Hide Question" : "Jump to Question"}

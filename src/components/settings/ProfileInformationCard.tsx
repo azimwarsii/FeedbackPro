@@ -1,18 +1,72 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { useModal } from "../../hooks/useModal";
 import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import Input from "../form/input/InputField";
 import Label from "../form/Label";
+import { useSession } from "next-auth/react";
+import { useUserStore } from "@/store/useUserStore";
+import { useEffect } from "react";
 
 export default function ProfileInformationCard() {
   const { isOpen, openModal, closeModal } = useModal();
-  
-  const handleSave = () => {
-    // Handle save logic here
-    console.log("Saving profile changes...");
-    closeModal();
+  const [companyName, setCompanyName] = useState("");
+  const [bio, setBio] = useState("");
+  const { data: session } = useSession();
+  const storeCompanyName = useUserStore((s) => s.companyName);
+  const storeBio = useUserStore((s) => s.bio);
+  const { updateProfile } = useUserStore();
+
+  // Prefill modal inputs from store whenever the modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCompanyName(storeCompanyName ?? "");
+      setBio(storeBio ?? "");
+    }
+  }, [isOpen, storeCompanyName, storeBio]);
+  const handleSave = async () => {
+    console.log(session?.user)
+    try {
+      const userId = (session as any)?.user?.id;
+      if (!userId) {
+        console.error("No user id found in session");
+        return;
+      }
+      const baseUrl = process.env.BACKEND_URL || "http://localhost:5000";
+      if (!baseUrl) {
+        console.error("Missing NEXT_PUBLIC_API_BASE_URL/BACKEND_URL. Set it to your Express origin, e.g., http://localhost:3001");
+        return;
+      }
+      const endpoint = `${baseUrl.replace(/\/+$/, "")}/edit/${userId}`;
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyName: companyName ?? undefined,
+          bio: bio ?? undefined,
+        }),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        console.error(`Failed to update profile. ${response.status} ${response.statusText} at ${endpoint}. Body:`, text);
+        return;
+      }
+      // Update user store locally after successful save
+      updateProfile({
+        companyName: companyName ?? undefined,
+        bio: bio ?? undefined,
+      });
+      closeModal();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
+    e.preventDefault();
+    await handleSave();
   };
 
   return (
@@ -30,7 +84,7 @@ export default function ProfileInformationCard() {
                   First Name
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  John
+                  {session?.user?.name?.split(" ")[0]}
                 </p>
               </div>
 
@@ -39,7 +93,7 @@ export default function ProfileInformationCard() {
                   Last Name
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  Doe
+                  {session?.user?.name?.split(" ")[session?.user?.name?.split(" ").length - 1]}
                 </p>
               </div>
 
@@ -48,7 +102,7 @@ export default function ProfileInformationCard() {
                   Email Address
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  john@company.com
+                  {session?.user?.email}
                 </p>
               </div>
 
@@ -57,7 +111,7 @@ export default function ProfileInformationCard() {
                   Company Name
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  Acme Corp
+                  {storeCompanyName}
                 </p>
               </div>
 
@@ -66,7 +120,7 @@ export default function ProfileInformationCard() {
                   Bio
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  Product Manager focused on customer feedback and user experience.
+                  {storeBio}
                 </p>
               </div>
             </div>
@@ -106,27 +160,39 @@ export default function ProfileInformationCard() {
               Update your profile details to keep your information up-to-date.
             </p>
           </div>
-          <form className="flex flex-col">
+          <form className="flex flex-col" onSubmit={handleSubmit}>
             <div className="custom-scrollbar h-[450px] overflow-y-auto px-2 pb-3">
               <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
                 <div>
                   <Label>First Name</Label>
-                  <Input type="text" defaultValue="John" />
+                  <Input 
+                    type="text" 
+                    defaultValue={session?.user?.name?.split(" ")[0] || "John"} 
+                    disabled={true}
+                  />
                 </div>
 
                 <div>
                   <Label>Last Name</Label>
-                  <Input type="text" defaultValue="Doe" />
+                  <Input 
+                    type="text" 
+                    defaultValue={session?.user?.name?.split(" ")[session?.user?.name?.split(" ").length - 1] || "Doe"} 
+                    disabled={true}
+                  />
                 </div>
 
                 <div>
                   <Label>Email Address</Label>
-                  <Input type="email" defaultValue="john@company.com" />
+                  <Input 
+                    type="email" 
+                    defaultValue={session?.user?.email || "john@company.com"} 
+                    disabled={true}
+                  />
                 </div>
 
                 <div>
                   <Label>Company Name</Label>
-                  <Input type="text" defaultValue="Acme Corp" />
+                  <Input type="text" defaultValue={companyName} onChange={(e) => setCompanyName(e.target.value)} />  
                 </div>
 
                 <div className="col-span-2">
@@ -134,7 +200,8 @@ export default function ProfileInformationCard() {
                   <textarea
                     className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                     rows={4}
-                    defaultValue="Product Manager focused on customer feedback and user experience."
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
                   />
                 </div>
               </div>
@@ -143,7 +210,7 @@ export default function ProfileInformationCard() {
               <Button size="sm" variant="outline" onClick={closeModal}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleSave}>
+              <Button size="sm">
                 Save Changes
               </Button>
             </div>
