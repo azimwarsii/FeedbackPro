@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { 
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
   Plus, 
   Download, 
   RefreshCw, 
@@ -21,9 +21,11 @@ import {
   TrendingUp,
   Star,
 } from "lucide-react";
+import { useSurveysStore } from "@/store/useSurveysStore";
+import { useSession } from "next-auth/react";
 
 type SurveyStatus = "Active" | "Paused" | "Completed" | "Draft";
-type SurveyType = "Product Feedback" | "Customer Satisfaction" | "Market Research" | "User Experience" | "Brand Awareness";
+type SurveyType = "Product Feedback" | "Customer Satisfaction" | "Market Research" ;
 
 interface Survey {
   id: string;
@@ -48,84 +50,9 @@ interface Template {
   estimatedTime: string;
 }
 
-const mockSurveys: Survey[] = [
-  {
-    id: "1",
-    title: "Q4 Product Feedback Survey",
-    status: "Active",
-    questions: 12,
-    responses: 156,
-    type: "Product Feedback",
-    createdDate: "Dec 1, 2024",
-    description: "Gathering insights about our latest product features and user experience improvements.",
-    targetAudience: "Existing Customers",
-    completionRate: 78.5
-  },
-  {
-    id: "2",
-    title: "Customer Satisfaction Index",
-    status: "Active",
-    questions: 8,
-    responses: 89,
-    type: "Customer Satisfaction",
-    createdDate: "Nov 28, 2024",
-    description: "Measuring overall customer satisfaction with our services and support.",
-    targetAudience: "All Users",
-    completionRate: 82.1
-  },
-  {
-    id: "3",
-    title: "Market Research Study 2024",
-    status: "Completed",
-    questions: 15,
-    responses: 234,
-    type: "Market Research",
-    createdDate: "Nov 15, 2024",
-    description: "Comprehensive market research to understand industry trends and opportunities.",
-    targetAudience: "General Public",
-    completionRate: 91.2
-  },
-  {
-    id: "4",
-    title: "Mobile App Usability Test",
-    status: "Paused",
-    questions: 10,
-    responses: 45,
-    type: "User Experience",
-    createdDate: "Dec 5, 2024",
-    description: "Testing mobile app navigation and feature accessibility.",
-    targetAudience: "Mobile Users",
-    completionRate: 65.3
-  },
-  {
-    id: "5",
-    title: "Brand Awareness Survey",
-    status: "Draft",
-    questions: 6,
-    responses: 0,
-    type: "Brand Awareness",
-    createdDate: "Dec 10, 2024",
-    description: "Research on brand recognition and market positioning.",
-    targetAudience: "Potential Customers",
-    completionRate: 0
-  },
-  {
-    id: "6",
-    title: "Website Redesign Feedback",
-    status: "Active",
-    questions: 9,
-    responses: 78,
-    type: "User Experience",
-    createdDate: "Dec 8, 2024",
-    description: "Collecting user feedback on the new website design and functionality.",
-    targetAudience: "Website Visitors",
-    completionRate: 73.8
-  }
-];
-
 const quickStartTemplates: Template[] = [
   {
-    id: "1",
+    id: "product-feedback",
     title: "Product Feedback",
     description: "Collect detailed feedback about your products and features",
     icon: <Target className="w-6 h-6" />,
@@ -134,7 +61,7 @@ const quickStartTemplates: Template[] = [
     estimatedTime: "5-7 min"
   },
   {
-    id: "2",
+    id: "customer-satisfaction",
     title: "Customer Satisfaction",
     description: "Measure customer satisfaction and identify improvement areas",
     icon: <Star className="w-6 h-6" />,
@@ -143,7 +70,7 @@ const quickStartTemplates: Template[] = [
     estimatedTime: "3-5 min"
   },
   {
-    id: "3",
+    id: "market-research",
     title: "Market Research",
     description: "Gather market insights and understand customer preferences",
     icon: <TrendingUp className="w-6 h-6" />,
@@ -153,17 +80,60 @@ const quickStartTemplates: Template[] = [
   }
 ];
 
+const mapGoalToType = (goal?: string): SurveyType => {
+  const normalized = (goal || "").toLowerCase();
+  switch (normalized) {
+    case "product feedback":
+      return "Product Feedback";
+    case "customer satisfaction":
+      return "Customer Satisfaction";
+    case "market research":
+      return "Market Research";
+    default:
+      return "Product Feedback";
+  }
+};
+
+const mapStatus = (status?: string): SurveyStatus => {
+  const normalized = (status || "").toLowerCase();
+  switch (normalized) {
+    case "active":
+      return "Active";
+    case "paused":
+      return "Paused";
+    case "completed":
+      return "Completed";
+    case "draft":
+      return "Draft";
+    default:
+      return "Draft";
+  }
+};
+
 export default function Surveys() {
+  const surveys = useSurveysStore((state) => state.surveys);
+  const removeSurvey = useSurveysStore((state) => state.removeSurvey);
+  const { data: session } = useSession();
+  const userId = (session as any)?.user?.id;
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [typeFilter, setTypeFilter] = useState("All Types");
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      let clickedInsideMenu = false;
+      
+      menuRefs.current.forEach((menuElement) => {
+        if (menuElement && menuElement.contains(target)) {
+          clickedInsideMenu = true;
+        }
+      });
+      
+      if (!clickedInsideMenu) {
         setOpenMenuId(null);
       }
     };
@@ -179,12 +149,86 @@ export default function Surveys() {
     setOpenMenuId(openMenuId === surveyId ? null : surveyId);
   };
 
-  const handleMenuAction = (action: string, surveyId: string) => {
-    console.log(`${action} survey ${surveyId}`);
-    setOpenMenuId(null);
+  const handleDeleteSurvey = async (survey: Survey) => {
+    const idForDeletion =  survey.id;
+    if (!idForDeletion) return;
+
+    const confirmDelete = window.confirm("Are you sure you want to delete this survey?");
+    if (!confirmDelete) return;
+
+    const baseUrl =
+      process.env.BACKEND_URL || "http://localhost:5000";
+    const endpoint = `${baseUrl.replace(/\/+$/, "")}/surveys/${idForDeletion}${
+      userId ? `?userId=${encodeURIComponent(userId)}` : ""
+    }`;
+
+    try {
+      const res = await fetch(endpoint, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        console.error("Failed to delete survey:", error);
+        alert(error.error || "Failed to delete survey. Please try again.");
+        return;
+      }
+
+      removeSurvey(idForDeletion);
+      alert("Survey deleted successfully.");
+    } catch (error) {
+      console.error("Error deleting survey:", error);
+      alert("An error occurred while deleting the survey. Please try again.");
+    }
   };
 
-  const filteredSurveys = mockSurveys.filter((survey) => {
+  const handleMenuAction = (action: string, survey: Survey, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+    }
+    
+    if (action === "Delete") {
+      setOpenMenuId(null); // Close menu first
+      // Use setTimeout to ensure menu closes before confirmation dialog
+      setTimeout(() => {
+        handleDeleteSurvey(survey);
+      }, 0);
+    } else {
+      console.log(`${action} survey ${survey.id}`);
+      setOpenMenuId(null);
+    }
+  };
+
+  const normalizedSurveys = useMemo<Survey[]>(() => {
+    return surveys.map((survey, index) => {
+      const questionsArray = Array.isArray(survey.questions) ? survey.questions : [];
+      const createdDate = survey.createdAt
+        ? new Date(survey.createdAt).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+        : "Unknown";
+      const type = mapGoalToType(survey.goal);
+      const status = mapStatus(survey.status);
+
+      return {
+        id: survey._id || survey.id || `survey-${index}`,
+        title: survey.title || "Untitled Survey",
+        status,
+        questions: questionsArray.length,
+        responses: Number(survey.responses ?? 0),
+        type,
+        createdDate,
+        description: survey.description || "No description provided.",
+        targetAudience: (survey as any).targetAudience || "All Users",
+        completionRate: Number((survey as any).completionRate ?? 0),
+        originalId: survey._id || survey.id,
+      };
+    });
+  }, [surveys]);
+
+  const filteredSurveys = normalizedSurveys.filter((survey) => {
     const matchesSearch = survey.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          survey.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "All Status" || survey.status === statusFilter;
@@ -280,11 +324,11 @@ export default function Surveys() {
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+            {/* <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <RefreshCw className="w-4 h-4" />
               <span className="hidden sm:inline">Refresh</span>
               <span className="sm:hidden">Refresh</span>
-            </button>
+            </button> */}
             <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
@@ -313,7 +357,7 @@ export default function Surveys() {
           {quickStartTemplates.map((template) => (
             <button
               key={template.id}
-              onClick={() => window.location.href = '/surveys/create'}
+              onClick={() => window.location.href = '/create?template='+template.id}
               className={`group relative overflow-hidden rounded-xl border border-gray-200 ${getTemplateColor(template.color)} p-6 shadow-sm transition-all hover:shadow-md dark:border-gray-700 hover:scale-105`}
             >
               <div className="flex items-center justify-between">
@@ -382,8 +426,6 @@ export default function Surveys() {
               <option value="Product Feedback">Product Feedback</option>
               <option value="Customer Satisfaction">Customer Satisfaction</option>
               <option value="Market Research">Market Research</option>
-              <option value="User Experience">User Experience</option>
-              <option value="Brand Awareness">Brand Awareness</option>
             </select>
           </div>
         </div>
@@ -397,7 +439,16 @@ export default function Surveys() {
             className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 dark:border-gray-700 dark:bg-gray-800 hover:scale-[1.02]"
           >
             {/* Menu Button */}
-            <div className="absolute top-4 right-4" ref={menuRef}>
+            <div 
+              className="absolute top-4 right-4"
+              ref={(el) => {
+                if (el) {
+                  menuRefs.current.set(survey.id, el);
+                } else {
+                  menuRefs.current.delete(survey.id);
+                }
+              }}
+            >
               <button 
                 onClick={(e) => handleMenuClick(survey.id, e)}
                 className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 opacity-0 group-hover:opacity-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -408,29 +459,15 @@ export default function Surveys() {
               {/* Dropdown Menu */}
               {openMenuId === survey.id && (
                 <div className="absolute right-0 top-8 z-50 w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                  <button
-                    onClick={() => handleMenuAction('Edit', survey.id)}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Edit Survey
-                  </button>
-                  <button
-                    onClick={() => handleMenuAction('View Results', survey.id)}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                    View Results
-                  </button>
-                  <button
-                    onClick={() => handleMenuAction('Duplicate', survey.id)}
+                  {/* <button
+                    onClick={(e) => handleMenuAction('Duplicate', survey, e)}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
                   >
                     <Copy className="w-4 h-4" />
                     Duplicate
-                  </button>
+                  </button> */}
                   <button
-                    onClick={() => handleMenuAction('Delete', survey.id)}
+                    onClick={(e) => handleMenuAction('Delete', survey, e)}
                     className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 flex items-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -474,10 +511,10 @@ export default function Surveys() {
                 <Target className="w-4 h-4" />
                 <span>{survey.type}</span>
               </div>
-              <div className="flex items-center gap-2">
+              {/* <div className="flex items-center gap-2">
                 <Users className="w-4 h-4" />
                 <span>{survey.targetAudience}</span>
-              </div>
+              </div> */}
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 <span>Created {survey.createdDate}</span>
@@ -485,7 +522,7 @@ export default function Surveys() {
             </div>
 
             {/* Completion Rate */}
-            <div className="mb-4">
+            {/* <div className="mb-4">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-xs text-gray-500 dark:text-gray-400">Completion Rate</span>
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{survey.completionRate}%</span>
@@ -496,11 +533,14 @@ export default function Surveys() {
                   style={{ width: `${survey.completionRate}%` }}
                 ></div>
               </div>
-            </div>
+            </div> */}
 
             {/* Action Buttons */}
             <div className="flex gap-2">
-              <button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+              <button 
+                onClick={() => window.location.href = `/create/${(survey as any).originalId || survey.id}`}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
                 <Edit className="w-4 h-4" />
                 Edit
               </button>
@@ -521,7 +561,7 @@ export default function Surveys() {
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             Try adjusting your search or filter criteria
           </p>
-          <button className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
+          <button onClick={() => window.location.href = '/create'} className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
             <Plus className="w-4 h-4" />
             Create First Survey
           </button>

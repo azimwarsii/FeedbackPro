@@ -2,11 +2,11 @@
 
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useSurveysStore } from "@/store/useSurveysStore";
+import { useCampaignStore } from "@/store/useCampaignStore";
 
-export default function SurveyStoreInitializer() {
+export default function CampaignStoreInitializer() {
 	const { data: session, status } = useSession();
-	const { setSurveys, reset } = useSurveysStore();
+	const { setCampaigns, reset } = useCampaignStore();
 
 	useEffect(() => {
 		if (status === "authenticated" && session?.user) {
@@ -18,22 +18,22 @@ export default function SurveyStoreInitializer() {
 
 				if (baseUrl && userId) {
 					try {
-						// Fetch all surveys for the user
+						// Fetch all campaigns for the user
 						const res = await fetch(
-							`${baseUrl.replace(/\/+$/, "")}/surveys?userId=${encodeURIComponent(userId)}`,
+							`${baseUrl.replace(/\/+$/, "")}/campaigns?userId=${encodeURIComponent(userId)}`,
 							{
 								method: "GET",
 							}
 						);
 						if (res.ok) {
 							const data = await res.json().catch(() => null);
-							const surveys = data?.surveys || data?.survey || (Array.isArray(data) ? data : []);
-							if (Array.isArray(surveys)) {
-								setSurveys(surveys);
+							const campaigns = data?.campaigns || data?.campaign || (Array.isArray(data) ? data : []);
+							if (Array.isArray(campaigns)) {
+								setCampaigns(campaigns);
 							}
 						}
 					} catch (error) {
-						console.error("Error fetching surveys:", error);
+						console.error("Error fetching campaigns:", error);
 					}
 				}
 			};
@@ -41,8 +41,8 @@ export default function SurveyStoreInitializer() {
 		} else if (status === "unauthenticated") {
 			reset();
 		}
-		console.log("SurveyStoreInitializer", status, session);
-	}, [status, session, setSurveys, reset]);
+		console.log("CampaignStoreInitializer", status, session);
+	}, [status, session, setCampaigns, reset]);
 
 	return null;
 }

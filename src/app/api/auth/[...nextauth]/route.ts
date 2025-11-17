@@ -127,6 +127,18 @@ const handler = NextAuth({
       } as any;
       return session;
     },
+
+    /**
+     * Handle redirects after sign-in
+     */
+    async redirect({ url, baseUrl }) {
+      // If a callbackUrl is provided, use it (relative to baseUrl)
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // If it's a full URL on the same origin, allow it
+      if (new URL(url).origin === baseUrl) return url;
+      // Default to home page
+      return baseUrl;
+    },
   },
 });
 

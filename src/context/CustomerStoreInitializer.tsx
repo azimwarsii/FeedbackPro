@@ -2,11 +2,11 @@
 
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useSurveysStore } from "@/store/useSurveysStore";
+import { useCustomerStore } from "@/store/useCustomerStore";
 
-export default function SurveyStoreInitializer() {
+export default function CustomerStoreInitializer() {
 	const { data: session, status } = useSession();
-	const { setSurveys, reset } = useSurveysStore();
+	const { setCustomers, reset } = useCustomerStore();
 
 	useEffect(() => {
 		if (status === "authenticated" && session?.user) {
@@ -18,22 +18,22 @@ export default function SurveyStoreInitializer() {
 
 				if (baseUrl && userId) {
 					try {
-						// Fetch all surveys for the user
+						// Fetch all customers for the user
 						const res = await fetch(
-							`${baseUrl.replace(/\/+$/, "")}/surveys?userId=${encodeURIComponent(userId)}`,
+							`${baseUrl.replace(/\/+$/, "")}/customers?userId=${encodeURIComponent(userId)}`,
 							{
 								method: "GET",
 							}
 						);
 						if (res.ok) {
 							const data = await res.json().catch(() => null);
-							const surveys = data?.surveys || data?.survey || (Array.isArray(data) ? data : []);
-							if (Array.isArray(surveys)) {
-								setSurveys(surveys);
+							const customers = data?.customers || data?.customer || (Array.isArray(data) ? data : []);
+							if (Array.isArray(customers)) {
+								setCustomers(customers);
 							}
 						}
 					} catch (error) {
-						console.error("Error fetching surveys:", error);
+						console.error("Error fetching customers:", error);
 					}
 				}
 			};
@@ -41,9 +41,10 @@ export default function SurveyStoreInitializer() {
 		} else if (status === "unauthenticated") {
 			reset();
 		}
-		console.log("SurveyStoreInitializer", status, session);
-	}, [status, session, setSurveys, reset]);
+	}, [status, session, setCustomers, reset]);
 
 	return null;
 }
+
+
 

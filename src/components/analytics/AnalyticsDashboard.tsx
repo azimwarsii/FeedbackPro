@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -26,6 +26,8 @@ import {
   XCircle
 } from "lucide-react";
 import LineChartOne from "@/components/charts/line/LineChartOne";
+import { useResponseStore } from "@/store/useResponseStore";
+import { useCampaignStore } from "@/store/useCampaignStore";
 
 interface Campaign {
   id: number;
@@ -193,10 +195,82 @@ const mockUserAnalytics: UserAnalytics[] = [
 ];
 
 export default function Analytics() {
+  const responses = useResponseStore((state) => state.responses);
+  const campaigns = useCampaignStore((state) => state.campaigns);
   const [detailedView, setDetailedView] = useState(false);
   const [dateFilter, setDateFilter] = useState("Last 30 days");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Calculate response rate metrics
+  const responseRateMetrics = useMemo(() => {
+    // Calculate total invitations (sum of all campaign contacts)
+    const totalInvitations = campaigns.reduce((sum, campaign) => {
+      return sum + (campaign.contacts?.length || 0);
+    }, 0);
+
+    // Calculate total responses (responses with dates)
+    const totalResponses = responses.filter((r) => r.completed_at || r.started_at).length;
+
+    // Calculate overall response rate
+    const overallResponseRate = totalInvitations === 0 ? 0 : (totalResponses / totalInvitations) * 100;
+
+    // Calculate current month response rate
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthResponses = responses.filter((r) => {
+      const dateStr = r.completed_at || r.started_at;
+      if (!dateStr) return false;
+      try {
+        const responseDate = new Date(dateStr);
+        return responseDate >= currentMonthStart && responseDate <= now;
+      } catch {
+        return false;
+      }
+    }).length;
+    const currentMonthInvitations = campaigns.reduce((sum, campaign) => {
+      const campaignDate = campaign.createdAt ? new Date(campaign.createdAt) : null;
+      if (campaignDate && campaignDate >= currentMonthStart && campaignDate <= now) {
+        return sum + (campaign.contacts?.length || 0);
+      }
+      return sum;
+    }, 0);
+    const currentMonthRate = currentMonthInvitations === 0 ? 0 : (currentMonthResponses / currentMonthInvitations) * 100;
+
+    // Calculate previous month response rate
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    const previousMonthResponses = responses.filter((r) => {
+      const dateStr = r.completed_at || r.started_at;
+      if (!dateStr) return false;
+      try {
+        const responseDate = new Date(dateStr);
+        return responseDate >= previousMonthStart && responseDate <= previousMonthEnd;
+      } catch {
+        return false;
+      }
+    }).length;
+    const previousMonthInvitations = campaigns.reduce((sum, campaign) => {
+      const campaignDate = campaign.createdAt ? new Date(campaign.createdAt) : null;
+      if (campaignDate && campaignDate >= previousMonthStart && campaignDate <= previousMonthEnd) {
+        return sum + (campaign.contacts?.length || 0);
+      }
+      return sum;
+    }, 0);
+    const previousMonthRate = previousMonthInvitations === 0 ? 0 : (previousMonthResponses / previousMonthInvitations) * 100;
+
+    // Calculate % increase
+    const percentIncrease = previousMonthRate === 0 
+      ? (currentMonthRate > 0 ? 100 : 0)
+      : ((currentMonthRate - previousMonthRate) / previousMonthRate) * 100;
+
+    return {
+      overall: overallResponseRate,
+      currentMonth: currentMonthRate,
+      previousMonth: previousMonthRate,
+      percentIncrease,
+    };
+  }, [responses, campaigns]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -655,10 +729,20 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Response Rate</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">78.5%</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{responseRateMetrics.overall.toFixed(1)}%</p>
                   <div className="flex items-center mt-1">
-                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <p className="ml-1 text-xs text-green-600 dark:text-green-400">+12.3% from last month</p>
+                    {responseRateMetrics.percentIncrease >= 0 ? (
+                      <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    )}
+                    <p className={`ml-1 text-xs ${
+                      responseRateMetrics.percentIncrease >= 0 
+                        ? "text-green-600 dark:text-green-400" 
+                        : "text-red-600 dark:text-red-400"
+                    }`}>
+                      {responseRateMetrics.percentIncrease >= 0 ? "+" : ""}{responseRateMetrics.percentIncrease.toFixed(1)}% from last month
+                    </p>
                   </div>
                 </div>
                 <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">

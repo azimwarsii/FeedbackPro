@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export interface Survey {
+	id?: string;
 	title: string;
 	description: string;
 	questions: any[];
@@ -22,6 +23,7 @@ type SurveysActions = {
 	addSurvey: (survey: Survey) => void;
 	setSurveys: (surveys: Survey[]) => void;
 	updateSurvey: (id: string, updates: Partial<Survey>) => void;
+	incrementSurveyResponse: (surveyId: string) => void;
 	removeSurvey: (id: string) => void;
 	reset: () => void;
 };
@@ -49,8 +51,17 @@ export const useSurveysStore = create<SurveysState & SurveysActions>((set) => ({
 	updateSurvey: (id, updates) =>
 		set((state) => ({
 			surveys: state.surveys.map((s) =>
-				s._id === id ? { ...s, ...updates } : s
+				s._id === id || s.id === id ? { ...s, ...updates } : s
 			),
+		})),
+	incrementSurveyResponse: (surveyId) =>
+		set((state) => ({
+			surveys: state.surveys.map((s) => {
+				if (s._id === surveyId || s.id === surveyId) {
+					return { ...s, responses: (s.responses || 0) + 1 };
+				}
+				return s;
+			}),
 		})),
 	removeSurvey: (id) =>
 		set((state) => ({

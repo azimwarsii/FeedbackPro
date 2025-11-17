@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { CreateCampaignDialog } from "./CreateCampaignDialog";
-import { MoreHorizontal, Edit, BarChart3, Copy, Trash2, Users, DollarSign, Calendar, Plus, Download, RefreshCw, Search, Filter, ChevronDown } from "lucide-react";
+import { MoreHorizontal, Edit, BarChart3, Copy, Trash2, Users, DollarSign, Calendar, Plus, Download, RefreshCw, Search, Filter, ChevronDown, Pause, Play, Tag } from "lucide-react";
+import { useCampaignStore, Campaign as StoreCampaign } from "@/store/useCampaignStore";
+import { useSession } from "next-auth/react";
 
-type Status = "Active" | "Paused" | "Completed" | "Draft";
+type Status = "Active" | "Paused" | "Completed";
 
 type Campaign = {
   id: string;
@@ -15,84 +18,153 @@ type Campaign = {
   budget: number;
   spent: number;
   endDate: string;
+  rewardType?: "cash reward" | "promo code";
+  promoCodesTotal?: number; // Total promo codes (contacts.length)
+  promoCodesUtilized?: number; // codes_utilized from reward
+  promoCode?: string; // The promo code itself
 };
 
 const statusColors: Record<Status, string> = {
   Active: "bg-emerald-100 text-emerald-700",
   Paused: "bg-amber-100 text-amber-700",
   Completed: "bg-sky-100 text-sky-700",
-  Draft: "bg-zinc-100 text-zinc-600",
 };
 
-const mockCampaigns: Campaign[] = [
-  {
-    id: "1",
-    title: "Q4 Product Feedback Survey",
-    description:
-      "Gathering insights about our latest product features and user experience improvements.",
-    status: "Active",
-    responses: 156,
-    budget: 1000,
-    spent: 650,
-    endDate: "Dec 30",
-  },
-  {
-    id: "2",
-    title: "Holiday Shopping Experience",
-    description:
-      "Understanding customer satisfaction during the holiday season shopping period.",
-    status: "Active",
-    responses: 89,
-    budget: 750,
-    spent: 320,
-    endDate: "Jan 15",
-  },
-  {
-    id: "3",
-    title: "Mobile App Usability Test",
-    description:
-      "Collecting feedback on mobile app navigation and feature accessibility.",
-    status: "Paused",
-    responses: 45,
-    budget: 500,
-    spent: 180,
-    endDate: "Jan 31",
-  },
-  {
-    id: "4",
-    title: "Brand Awareness Survey",
-    description:
-      "Research on brand recognition and market positioning.",
-    status: "Completed",
-    responses: 200,
-    budget: 800,
-    spent: 800,
-    endDate: "Nov 15",
-  },
-  {
-    id: "5",
-    title: "Website Redesign Feedback",
-    description:
-      "Collecting user feedback on the new website design and functionality.",
-    status: "Draft",
-    responses: 0,
-    budget: 600,
-    spent: 0,
-    endDate: "Feb 28",
-  },
-];
+// Helper function to mask promo code for security
+const maskPromoCode = (code: string): string => {
+  if (!code || code.length <= 4) {
+    return code; // Too short to mask
+  }
+  
+  // Show first 2 and last 2 characters, mask the rest
+  const visibleStart = code.substring(0, 2);
+  const visibleEnd = code.substring(code.length - 2);
+  const maskedLength = code.length - 4;
+  const masked = "•".repeat(maskedLength);
+  
+  return `${visibleStart}${masked}${visibleEnd}`;
+};
+
+// Helper function to map store campaign to display campaign
+const mapCampaignToDisplay = (storeCampaign: StoreCampaign): Campaign => {
+  const id = storeCampaign._id || storeCampaign.id || "";
+  
+  // Calculate budget based on reward and contacts
+  let budget = 0;
+  let spent = 0;
+  let promoCodesTotal: number | undefined;
+  let promoCodesUtilized: number | undefined;
+  
+  const contactsCount = storeCampaign.contacts?.length || 0;
+  
+  if (storeCampaign.reward) {
+    if (storeCampaign.reward.type === "cash reward" && storeCampaign.reward.amount) {
+      budget = storeCampaign.reward.amount * contactsCount;
+      // Use amount_utilized if available, otherwise estimate based on responses
+      spent = storeCampaign.reward.amount_utilized ?? (storeCampaign.reward.amount * (storeCampaign.responses || 0));
+    } else if (storeCampaign.reward.type === "promo code") {
+      // For promo codes, show codes instead of budget
+      promoCodesTotal = contactsCount;
+      promoCodesUtilized = storeCampaign.reward.codes_utilized ?? 0;
+      // Still calculate SMS costs for budget/spent
+      budget = contactsCount * 0.02; // SMS cost per message
+      spent = (storeCampaign.responses || 0) * 0.02;
+    }
+  } else {
+    // No reward, just SMS costs
+    budget = contactsCount * 0.02; // SMS cost per message
+    spent = (storeCampaign.responses || 0) * 0.02;
+  }
+  
+  // Get status from store, or calculate based on responses and dates
+  let status: Status = "Active"; // Default to Active instead of Draft
+  let hasValidStatusFromStore = false;
+  
+  // First, try to use status from storeCampaign
+  if (storeCampaign.status) {
+    const storeStatus = storeCampaign.status.trim();
+    // Capitalize first letter and check if it's a valid Status
+    const capitalizedStatus = storeStatus.charAt(0).toUpperCase() + storeStatus.slice(1).toLowerCase();
+    // Map "Draft" to "Active" if it exists in store
+    const normalizedStatus = capitalizedStatus === "Draft" ? "Active" : capitalizedStatus;
+    if (["Active", "Paused", "Completed"].includes(normalizedStatus)) {
+      status = normalizedStatus as Status;
+      hasValidStatusFromStore = true;
+    }
+  }
+  
+  // If no valid status from store, calculate based on responses
+  if (!hasValidStatusFromStore) {
+    if (storeCampaign.responses > 0) {
+      const totalContacts = contactsCount;
+      if (totalContacts > 0) {
+        const responseRate = storeCampaign.responses / totalContacts;
+        if (responseRate >= 0.8) {
+          status = "Completed";
+        } else if (responseRate >= 0.3) {
+          status = "Active";
+        } else {
+          status = "Paused";
+        }
+      } else {
+        status = "Active"; // If no contacts but has responses, mark as active
+      }
+    }
+  }
+  
+  // Format end date from createdAt (add 30 days as default)
+  let endDate = "N/A";
+  if (storeCampaign.createdAt) {
+    const createdDate = new Date(storeCampaign.createdAt);
+    const endDateObj = new Date(createdDate);
+    endDateObj.setDate(endDateObj.getDate() + 30);
+    endDate = endDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  
+  return {
+    id,
+    title: storeCampaign.name,
+    description: storeCampaign.description || storeCampaign.message_template || "No description",
+    status,
+    responses: storeCampaign.responses || 0,
+    budget: Math.round(budget * 100) / 100,
+    spent: Math.round(spent * 100) / 100,
+    endDate,
+    rewardType: storeCampaign.reward?.type,
+    promoCodesTotal,
+    promoCodesUtilized,
+    promoCode: storeCampaign.reward?.code,
+  };
+};
 
 
 export default function Campaigns() {
+  const router = useRouter();
+  const campaigns = useCampaignStore((state) => state.campaigns);
+  const removeCampaign = useCampaignStore((state) => state.removeCampaign);
+  const updateCampaign = useCampaignStore((state) => state.updateCampaign);
+  const { data: session } = useSession();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  
+  // Map store campaigns to display format
+  const displayCampaigns: Campaign[] = campaigns.map(mapCampaignToDisplay);
 
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      let clickedInsideMenu = false;
+      
+      menuRefs.current.forEach((menuElement) => {
+        if (menuElement && menuElement.contains(target)) {
+          clickedInsideMenu = true;
+        }
+      });
+      
+      if (!clickedInsideMenu) {
         setOpenMenuId(null);
       }
     };
@@ -108,23 +180,161 @@ export default function Campaigns() {
     setOpenMenuId(openMenuId === campaignId ? null : campaignId);
   };
 
-  const handleMenuAction = (action: string, campaignId: string) => {
-    console.log(`${action} campaign ${campaignId}`);
-    setOpenMenuId(null);
+  const handleToggleStatus = async (campaignId: string, currentStatus: Status, action: "pause" | "start") => {
+    const safeUser = session?.user as any;
+    const userId = safeUser?.id as string | undefined;
+
+    if (!userId) {
+      alert("You must be logged in to update a campaign.");
+      return;
+    }
+
+    // Determine new status based on action
+    // On Pause click: update status to "paused"
+    // On Start click: update status to "active"
+    const newStatus = action === "pause" ? "paused" : "active";
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+
+    try {
+      const response = await fetch(
+        `${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}?userId=${encodeURIComponent(userId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: newStatus,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const updatedCampaign = data?.campaign || data;
+        
+        // Update campaign in local store with the new status
+        updateCampaign(campaignId, {
+          status: newStatus,
+        });
+        
+        alert(`Campaign ${action === "start" ? "started" : "paused"} successfully!`);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        alert(`Failed to update campaign: ${errorData.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Error updating campaign status:", error);
+      alert("An error occurred while updating the campaign. Please try again.");
+    }
   };
 
-  const filteredCampaigns = mockCampaigns.filter((campaign) => {
+  const handleDeleteCampaign = async (campaignId: string) => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this campaign? This action cannot be undone."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const safeUser = session?.user as any;
+    const userId = safeUser?.id as string | undefined;
+
+    if (!userId) {
+      alert("You must be logged in to delete a campaign.");
+      return;
+    }
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+
+    try {
+      const response = await fetch(
+        `${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}?userId=${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (response.ok) {
+        // Remove campaign from local store
+        removeCampaign(campaignId);
+        alert("Campaign deleted successfully!");
+      } else {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        alert(`Failed to delete campaign: ${errorData.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Error deleting campaign:", error);
+      alert("An error occurred while deleting the campaign. Please try again.");
+    }
+  };
+
+  const handleCopyFeedbackLink = async (campaignId: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+    }
+    
+    try {
+      const feedbackLink = `${window.location.origin}/feedback/${campaignId}`;
+      await navigator.clipboard.writeText(feedbackLink);
+      setOpenMenuId(null);
+      alert("Feedback link copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy link:", err);
+      alert("Failed to copy link. Please try again.");
+    }
+  };
+
+  const handleMenuAction = (action: string, campaignId: string, currentStatus?: Status, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+    }
+    
+    if (action === "Delete") {
+      setOpenMenuId(null); // Close menu first
+      // Use setTimeout to ensure menu closes before confirmation dialog
+      setTimeout(() => {
+        handleDeleteCampaign(campaignId);
+      }, 0);
+    } else if (action === "Pause" && currentStatus === "Active") {
+      setOpenMenuId(null); // Close menu first
+      handleToggleStatus(campaignId, currentStatus, "pause");
+    } else if (action === "Start" && currentStatus === "Paused") {
+      setOpenMenuId(null); // Close menu first
+      handleToggleStatus(campaignId, currentStatus, "start");
+    } else {
+      console.log(`${action} campaign ${campaignId}`);
+      setOpenMenuId(null);
+    }
+  };
+
+  const filteredCampaigns = displayCampaigns.filter((campaign) => {
     const matchesSearch = campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          campaign.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "All Status" || campaign.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const totalCampaigns = mockCampaigns.length;
-  const activeCampaigns = mockCampaigns.filter(c => c.status === "Active").length;
-  const totalResponses = mockCampaigns.reduce((sum, c) => sum + c.responses, 0);
-  const totalBudget = mockCampaigns.reduce((sum, c) => sum + c.budget, 0);
-  const totalSpent = mockCampaigns.reduce((sum, c) => sum + c.spent, 0);
+  const totalCampaigns = displayCampaigns.length;
+  const activeCampaigns = displayCampaigns.filter(c => c.status === "Active").length;
+  const totalResponses = displayCampaigns.reduce((sum, c) => sum + c.responses, 0);
+  const totalBudget = displayCampaigns.reduce((sum, c) => sum + c.budget, 0);
+  const totalSpent = displayCampaigns.reduce((sum, c) => sum + c.spent, 0);
+
+  // Calculate campaigns created this month
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const campaignsThisMonth = campaigns.filter(campaign => {
+    if (!campaign.createdAt) return false;
+    const createdDate = new Date(campaign.createdAt);
+    return createdDate.getMonth() === currentMonth && createdDate.getFullYear() === currentYear;
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -138,11 +348,11 @@ export default function Campaigns() {
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+            {/* <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <RefreshCw className="w-4 h-4" />
               <span className="hidden sm:inline">Refresh</span>
               <span className="sm:hidden">Refresh</span>
-            </button>
+            </button> */}
             <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
@@ -160,7 +370,9 @@ export default function Campaigns() {
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Campaigns</p>
               <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{totalCampaigns}</p>
-              <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">+2 this month</p>
+              <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                {campaignsThisMonth > 0 ? `+${campaignsThisMonth} this month` : "No campaigns this month"}
+              </p>
             </div>
             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
               <BarChart3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -173,7 +385,7 @@ export default function Campaigns() {
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Campaigns</p>
               <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{activeCampaigns}</p>
-              <p className="mt-1 text-xs text-green-600 dark:text-green-400">{Math.round((activeCampaigns/totalCampaigns)*100)}% active rate</p>
+              <p className="mt-1 text-xs text-green-600 dark:text-green-400">{totalCampaigns > 0 ? Math.round((activeCampaigns/totalCampaigns)*100) : 0}% active rate</p>
             </div>
             <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
               <Users className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -186,7 +398,7 @@ export default function Campaigns() {
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Responses</p>
               <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{totalResponses}</p>
-              <p className="mt-1 text-xs text-purple-600 dark:text-purple-400">Avg {Math.round(totalResponses/totalCampaigns)} per campaign</p>
+              <p className="mt-1 text-xs text-purple-600 dark:text-purple-400">Avg {totalCampaigns > 0 ? Math.round(totalResponses/totalCampaigns) : 0} per campaign</p>
             </div>
             <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
               <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -234,7 +446,6 @@ export default function Campaigns() {
                 <option value="Active">Active</option>
                 <option value="Paused">Paused</option>
                 <option value="Completed">Completed</option>
-                <option value="Draft">Draft</option>
               </select>
               <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
@@ -244,47 +455,76 @@ export default function Campaigns() {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {filteredCampaigns.map((c) => {
-          const percent = Math.round((c.spent / c.budget) * 100);
+          const isPromoCode = c.rewardType === "promo code";
+          const percent = isPromoCode 
+            ? (c.promoCodesUtilized && c.promoCodesTotal ? Math.round((c.promoCodesUtilized / c.promoCodesTotal) * 100) : 0)
+            : (c.budget > 0 ? Math.round((c.spent / c.budget) * 100) : 0);
           return (
             <div 
               key={c.id} 
-              className="relative rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 dark:border-gray-700 dark:bg-gray-800 hover:scale-[1.02] group"
+              onClick={(e) => {
+                // Don't navigate if clicking on the menu button or menu itself
+                const target = e.target as HTMLElement;
+                if (!target.closest('.menu-button') && !target.closest('.menu-dropdown')) {
+                  router.push(`/campaign/${c.id}`);
+                }
+              }}
+              className="relative rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 dark:border-gray-700 dark:bg-gray-800 hover:scale-[1.02] group cursor-pointer"
             >
               {/* Menu Button */}
-              <div className="absolute top-4 right-4" ref={menuRef}>
+              <div 
+                className="absolute top-4 right-4 menu-button"
+                ref={(el) => {
+                  if (el) {
+                    menuRefs.current.set(c.id, el);
+                  } else {
+                    menuRefs.current.delete(c.id);
+                  }
+                }}
+              >
                 <button 
-                  onClick={(e) => handleMenuClick(c.id, e)}
-                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 opacity-0 group-hover:opacity-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMenuClick(c.id, e);
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <MoreHorizontal className="w-4 h-4" />
                 </button>
                 
                 {/* Dropdown Menu */}
                 {openMenuId === c.id && (
-                  <div className="absolute right-0 top-8 z-50 w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                  <div 
+                    className="absolute right-0 top-8 z-50 w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800 menu-dropdown"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {c.status === "Active" && (
+                      <button
+                        onClick={(e) => handleMenuAction('Pause', c.id, c.status, e)}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
+                      >
+                        <Pause className="w-4 h-4" />
+                        Pause
+                      </button>
+                    )}
+                    {c.status === "Paused" && (
+                      <button
+                        onClick={(e) => handleMenuAction('Start', c.id, c.status, e)}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
+                      >
+                        <Play className="w-4 h-4" />
+                        Start
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleMenuAction('Edit', c.id)}
-                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
-                    >
-                      <Edit className="w-4 h-4" />
-                      Edit Campaign
-                    </button>
-                    <button
-                      onClick={() => handleMenuAction('View Analytics', c.id)}
-                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
-                    >
-                      <BarChart3 className="w-4 h-4" />
-                      View Analytics
-                    </button>
-                    <button
-                      onClick={() => handleMenuAction('Duplicate', c.id)}
+                      onClick={(e) => handleCopyFeedbackLink(c.id, e)}
                       className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 flex items-center gap-2"
                     >
                       <Copy className="w-4 h-4" />
-                      Duplicate
+                      Copy Feedback Link
                     </button>
                     <button
-                      onClick={() => handleMenuAction('Delete', c.id)}
+                      onClick={(e) => handleMenuAction('Delete', c.id, undefined, e)}
                       className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 flex items-center gap-2"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -315,8 +555,8 @@ export default function Campaigns() {
               <div className="grid grid-cols-3 gap-4 mb-4">
                 {/* Responses */}
                 <div className="text-center group/metric">
-                  <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 group-hover/metric:bg-purple-50 dark:group-hover/metric:bg-purple-500/20 transition-colors duration-200">
-                    <Users className="text-gray-600 w-5 h-5 dark:text-gray-400 group-hover/metric:text-purple-500 dark:group-hover/metric:text-purple-400 transition-colors duration-200" />
+                  <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 transition-colors duration-200">
+                    <Users className="text-gray-600 w-5 h-5 dark:text-gray-400 transition-colors duration-200" />
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Responses</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -324,21 +564,30 @@ export default function Campaigns() {
                   </p>
                 </div>
 
-                {/* Budget */}
+                {/* Budget or Promo Codes */}
                 <div className="text-center group/metric">
-                  <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 group-hover/metric:bg-purple-50 dark:group-hover/metric:bg-purple-500/20 transition-colors duration-200">
-                    <DollarSign className="text-gray-600 w-5 h-5 dark:text-gray-400 group-hover/metric:text-purple-500 dark:group-hover/metric:text-purple-400 transition-colors duration-200" />
+                  <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 transition-colors duration-200">
+                    {isPromoCode ? (
+                      <Tag className="text-gray-600 w-5 h-5 dark:text-gray-400 transition-colors duration-200" />
+                    ) : (
+                      <DollarSign className="text-gray-600 w-5 h-5 dark:text-gray-400 transition-colors duration-200" />
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Budget</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {isPromoCode ? "Promo Code" : "Budget"}
+                  </p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    ${c.budget}
+                    {isPromoCode 
+                      ? (c.promoCode ? maskPromoCode(c.promoCode) : "N/A")
+                      : `$${c.budget}`
+                    }
                   </p>
                 </div>
 
                 {/* End Date */}
                 <div className="text-center group/metric">
-                  <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 group-hover/metric:bg-purple-50 dark:group-hover/metric:bg-purple-500/20 transition-colors duration-200">
-                    <Calendar className="text-gray-600 w-5 h-5 dark:text-gray-400 group-hover/metric:text-purple-500 dark:group-hover/metric:text-purple-400 transition-colors duration-200" />
+                  <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 transition-colors duration-200">
+                    <Calendar className="text-gray-600 w-5 h-5 dark:text-gray-400 transition-colors duration-200" />
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">End Date</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -347,20 +596,25 @@ export default function Campaigns() {
                 </div>
               </div>
 
-              {/* Budget Progress */}
+              {/* Budget Progress or Promo Code Utilization */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Budget Used</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {isPromoCode ? "Promo Codes Utilized" : "Budget Used"}
+                  </span>
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    ${c.spent} / ${c.budget}
+                    {isPromoCode 
+                      ? `${c.promoCodesUtilized ?? 0} / ${c.promoCodesTotal ?? 0}`
+                      : `$${c.spent} / $${c.budget}`
+                    }
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700 overflow-hidden">
                   <div
                     className="bg-purple-500 h-2 rounded-full transition-all duration-700 ease-out"
                     style={{
-                      width: `${percent}%`,
-                      animationDelay: `${parseInt(c.id) * 150}ms`,
+                      width: `${Math.min(percent, 100)}%`,
+                      animationDelay: `${(c.id.charCodeAt(0) || 0) * 150}ms`,
                     }}
                   ></div>
                 </div>
@@ -378,10 +632,7 @@ export default function Campaigns() {
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             Try adjusting your search or filter criteria
           </p>
-          <button className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl">
-            <Plus className="w-4 h-4" />
-            Create First Campaign
-          </button>
+          <CreateCampaignDialog />
         </div>
       )}
     </div>

@@ -2,8 +2,9 @@
 import { ApexOptions } from "apexcharts";
 import dynamic from "next/dynamic";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
+import { useResponseStore } from "@/store/useResponseStore";
 
 // Dynamically import the ReactApexChart component
 const ReactApexChart = dynamic(() => import("react-apexcharts"), {
@@ -11,6 +12,33 @@ const ReactApexChart = dynamic(() => import("react-apexcharts"), {
 });
 
 export default function MonthlySalesChart() {
+  const responses = useResponseStore((state) => state.responses);
+
+  // Calculate monthly rewards paid from responses
+  const monthlyData = useMemo(() => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthlyRewards = new Array(12).fill(0);
+
+    // Filter responses with reward_status === "paid" and calculate by month
+    responses
+      .filter((r) => r.reward_status === "paid" && r.reward_amount && r.reward_amount > 0)
+      .forEach((response) => {
+        // Use completed_at if available, otherwise use started_at
+        const dateStr = response.completed_at || response.started_at;
+        if (dateStr) {
+          try {
+            const date = new Date(dateStr);
+            const month = date.getMonth(); // 0-11
+            monthlyRewards[month] += response.reward_amount || 0;
+          } catch (err) {
+            console.warn("Invalid date in response:", dateStr);
+          }
+        }
+      });
+
+    return monthlyRewards;
+  }, [responses]);
+
   const options: ApexOptions = {
     colors: ["#7a5af8"],
     chart: {
@@ -92,8 +120,8 @@ export default function MonthlySalesChart() {
   };
   const series = [
     {
-      name: "Amount in Dollars ",
-      data: [168, 385, 201, 298, 187, 195, 291, 110, 215, 390, 280, 112],
+      name: "Amount in Dollars",
+      data: monthlyData,
     },
   ];
   const [isOpen, setIsOpen] = useState(false);

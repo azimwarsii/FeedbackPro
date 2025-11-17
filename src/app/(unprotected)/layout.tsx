@@ -1,6 +1,5 @@
 "use client";
-import { SessionProvider, useSession } from "next-auth/react";
-import { redirect } from "next/navigation";
+import { SessionProvider } from "next-auth/react";
 import React from "react";    
 
 export default function FullWidthPageLayout({
@@ -8,7 +7,7 @@ export default function FullWidthPageLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { data: session } = useSession();
-  if (session) redirect("/");
+  // Don't redirect authenticated users on feedback pages
+  // The feedback page itself will handle authentication requirements
   return <SessionProvider><div>{children}</div></SessionProvider>;
 }

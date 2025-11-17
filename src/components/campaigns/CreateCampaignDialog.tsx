@@ -5,7 +5,12 @@ import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import InputField from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import { Plus, Copy, Trash2, DollarSign, Users, FileText, MessageSquare, Mail, ArrowUp, ArrowDown, User, Search, File, CheckCircle, Gift, Upload, Sparkles, Filter, X, Eye, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Copy, Trash2, DollarSign, Users, FileText, MessageSquare, Mail, ArrowUp, ArrowDown, User, Search, File, CheckCircle, Gift, Upload, Sparkles, Filter, X, Eye, EyeOff, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { useSurveysStore } from "@/store/useSurveysStore";
+import { useCampaignStore } from "@/store/useCampaignStore";
+import { useCustomerStore } from "@/store/useCustomerStore";
+import { useSession } from "next-auth/react";
+import * as XLSX from "xlsx";
 
 interface LogicRule {
   id: string;
@@ -38,66 +43,52 @@ interface Survey {
   };
 }
 
-interface Customer {
+interface CustomerDisplay {
   id: string;
   name: string;
   email: string;
   phone: string;
-  lastCampaign: string;
-  status: "completed" | "partial" | "not_started";
 }
 
 export function CreateCampaignDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState("details");
+  const surveys = useSurveysStore((state) => state.surveys);
+  const addCampaign = useCampaignStore((state) => state.addCampaign);
+  const storeCustomers = useCustomerStore((state) => state.customers);
+  const { data: session } = useSession();
+  const userId = (session as any)?.user?.id;
   const [campaignData, setCampaignData] = useState({
     name: "",
     description: "",
     smsTemplate: "",
     surveyLink: "",
+    selectedSurveyId: "",
     contactMethod: "upload" as "upload" | "previous",
     contacts: null as File | null,
     selectedCustomers: [] as string[],
     rewardType: "",
     rewardValue: "",
+    promoDescription: "",
     budget: ""
   });
 
-  // Survey creation state
-  const [surveyData, setSurveyData] = useState<Survey>({
-    id: Date.now().toString(),
-    title: "",
-    description: "",
-    questions: [],
-    settings: {
-      allowAnonymous: true,
-      showProgressBar: true,
-      randomizeQuestions: false,
-      thankYouMessage: "Thank you for completing the survey!"
-    }
-  });
-  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
-  const [showLogic, setShowLogic] = useState(false);
-  const [currentPreviewQuestion, setCurrentPreviewQuestion] = useState(0);
-
-  // Mock data for previous campaign customers
-  const previousCustomers: Customer[] = [
-    { id: "1", name: "John Doe", email: "john@email.com", phone: "+1234567890", lastCampaign: "Q3 Product Survey", status: "completed" },
-    { id: "2", name: "Jane Smith", email: "jane@email.com", phone: "+1234567891", lastCampaign: "Holiday Feedback", status: "completed" },
-    { id: "3", name: "Mike Johnson", email: "mike@email.com", phone: "+1234567892", lastCampaign: "Q3 Product Survey", status: "partial" },
-    { id: "4", name: "Sarah Wilson", email: "sarah@email.com", phone: "+1234567893", lastCampaign: "Brand Awareness", status: "completed" },
-    { id: "5", name: "David Brown", email: "david@email.com", phone: "+1234567894", lastCampaign: "Holiday Feedback", status: "not_started" },
-    { id: "6", name: "Lisa Davis", email: "lisa@email.com", phone: "+1234567895", lastCampaign: "Q3 Product Survey", status: "completed" },
-  ];
+  // Transform store customers to display format
+  const existingCustomers: CustomerDisplay[] = storeCustomers.map(customer => ({
+    id: customer._id || customer.id || "",
+    name: customer.name,
+    email: customer.email,
+    phone: customer.phone,
+  }));
 
   const [customerSearch, setCustomerSearch] = useState("");
-  const [customerFilter, setCustomerFilter] = useState("all");
+  const [parsedContacts, setParsedContacts] = useState<Array<{ name: string; phone: string; email: string; row: number; isValid: boolean; errors: string[] }>>([]);
 
-  const filteredCustomers = previousCustomers.filter(customer => {
+  const filteredCustomers = existingCustomers.filter(customer => {
     const matchesSearch = customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                         customer.email.toLowerCase().includes(customerSearch.toLowerCase());
-    const matchesFilter = customerFilter === "all" || customer.status === customerFilter;
-    return matchesSearch && matchesFilter;
+                         customer.email.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                         customer.phone.toLowerCase().includes(customerSearch.toLowerCase());
+    return matchesSearch;
   });
 
   const handleCustomerToggle = (customerId: string) => {
@@ -121,177 +112,401 @@ export function CreateCampaignDialog() {
     }));
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setCampaignData(prev => ({ ...prev, contacts: file }));
-    }
-  };
+    if (!file) return;
 
-  const handleCreateCampaign = () => {
-    // Mock campaign creation
-    console.log("Campaign created:", campaignData);
-    setIsOpen(false);
-    setCampaignData({
-      name: "",
-      description: "",
-      smsTemplate: "",
-      surveyLink: "",
-      contactMethod: "upload",
-      contacts: null,
-      selectedCustomers: [],
-      rewardType: "",
-      rewardValue: "",
-      budget: ""
-    });
-    setCurrentStep("details");
-  };
-
-  // Survey management functions
-  const addQuestion = () => {
-    const newQuestion: SurveyQuestion = {
-      id: `q-${Date.now()}`,
-      type: "text",
-      title: "",
-      description: "",
-      required: false,
-      logicRules: [],
-    };
-    setSurveyData(prev => ({
-      ...prev,
-      questions: [...prev.questions, newQuestion]
-    }));
-    setEditingQuestionId(newQuestion.id);
-  };
-
-  const updateQuestion = (questionId: string, updates: Partial<SurveyQuestion>) => {
-    setSurveyData(prev => ({
-      ...prev,
-      questions: prev.questions.map(q => 
-        q.id === questionId ? { ...q, ...updates } : q
-      )
-    }));
-  };
-
-  const deleteQuestion = (questionId: string) => {
-    setSurveyData(prev => ({
-      ...prev,
-      questions: prev.questions.filter(q => q.id !== questionId)
-    }));
-    if (editingQuestionId === questionId) {
-      setEditingQuestionId(null);
-    }
-  };
-
-  const duplicateQuestion = (questionId: string) => {
-    const question = surveyData.questions.find(q => q.id === questionId);
-    if (question) {
-      const newQuestion: SurveyQuestion = {
-        ...question,
-        id: `q-${Date.now()}`,
-        title: `${question.title} (Copy)`,
-        logicRules: question.logicRules.map(rule => ({
-          ...rule,
-          id: `rule-${Date.now()}-${Math.random()}`
-        }))
-      };
-      setSurveyData(prev => ({
-        ...prev,
-        questions: [...prev.questions, newQuestion]
-      }));
-    }
-  };
-
-  // Logic rule management functions
-  const addLogicRule = (questionId: string) => {
-    const newRule: LogicRule = {
-      id: `rule-${Date.now()}-${Math.random()}`,
-      condition: "equals",
-      value: "",
-      action: "show"
-    };
-    
-    setSurveyData(prev => ({
-      ...prev,
-      questions: prev.questions.map(q => 
-        q.id === questionId 
-          ? { ...q, logicRules: [...q.logicRules, newRule] }
-          : q
-      )
-    }));
-  };
-
-  const updateLogicRule = (questionId: string, ruleId: string, updates: Partial<LogicRule>) => {
-    setSurveyData(prev => ({
-      ...prev,
-      questions: prev.questions.map(q => 
-        q.id === questionId 
-          ? { 
-              ...q, 
-              logicRules: q.logicRules.map(rule => 
-                rule.id === ruleId ? { ...rule, ...updates } : rule
-              )
+    try {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      
+      if (fileExtension === 'csv') {
+        // Handle CSV
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        
+        const nameIndex = headers.findIndex(h => h === 'name');
+        const phoneIndex = headers.findIndex(h => h === 'phone');
+        const emailIndex = headers.findIndex(h => h === 'email');
+        
+        if (nameIndex === -1 || phoneIndex === -1 || emailIndex === -1) {
+          alert("CSV file must contain 'name', 'phone', and 'email' columns");
+          return;
+        }
+        
+        // Create sets of existing emails and phones for quick lookup
+        // Note: storeCustomers is already filtered by current user, so duplicates are checked only within the current user's customers
+        const existingEmails = new Set(storeCustomers.map(c => c.email.toLowerCase().trim()));
+        const existingPhones = new Set(storeCustomers.map(c => c.phone.trim()));
+        
+        // Track duplicates within the file itself
+        const fileEmails = new Map<string, number>();
+        const filePhones = new Map<string, number>();
+        
+        const contacts = lines.slice(1).map((line, index) => {
+          const values = line.split(',').map(v => v.trim());
+          const name = values[nameIndex] || '';
+          const phone = values[phoneIndex] || '';
+          const email = values[emailIndex] || '';
+          
+          const errors: string[] = [];
+          if (!name) errors.push("Name is required");
+          if (!phone) errors.push("Phone is required");
+          if (!email) errors.push("Email is required");
+          
+          // Check for duplicates in existing customers
+          if (email && existingEmails.has(email.toLowerCase().trim())) {
+            errors.push("Email already exists");
+          }
+          if (phone && existingPhones.has(phone.trim())) {
+            errors.push("Phone already exists");
+          }
+          
+          // Track duplicates within the file
+          if (email) {
+            const emailKey = email.toLowerCase().trim();
+            fileEmails.set(emailKey, (fileEmails.get(emailKey) || 0) + 1);
+          }
+          if (phone) {
+            filePhones.set(phone.trim(), (filePhones.get(phone.trim()) || 0) + 1);
+          }
+          
+          return {
+            name,
+            phone,
+            email,
+            row: index + 2, // +2 because index starts at 0 and we skip header
+            isValid: errors.length === 0,
+            errors
+          };
+        });
+        
+        // Check for duplicates within the file and add errors
+        const contactsWithDuplicateErrors = contacts.map(contact => {
+          const errors = [...contact.errors];
+          const emailKey = contact.email.toLowerCase().trim();
+          const phoneKey = contact.phone.trim();
+          
+          if (contact.email && fileEmails.get(emailKey)! > 1) {
+            if (!errors.includes("Email already exists")) {
+              errors.push("Duplicate email in file");
             }
-          : q
-      )
-    }));
-  };
-
-  const deleteLogicRule = (questionId: string, ruleId: string) => {
-    setSurveyData(prev => ({
-      ...prev,
-      questions: prev.questions.map(q => 
-        q.id === questionId 
-          ? { ...q, logicRules: q.logicRules.filter(rule => rule.id !== ruleId) }
-          : q
-      )
-    }));
-  };
-
-  const moveQuestion = (questionId: string, direction: "up" | "down") => {
-    const index = surveyData.questions.findIndex(q => q.id === questionId);
-    if (
-      (direction === "up" && index > 0) ||
-      (direction === "down" && index < surveyData.questions.length - 1)
-    ) {
-      const newQuestions = [...surveyData.questions];
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      [newQuestions[index], newQuestions[targetIndex]] = [newQuestions[targetIndex], newQuestions[index]];
-      setSurveyData(prev => ({ ...prev, questions: newQuestions }));
+          }
+          if (contact.phone && filePhones.get(phoneKey)! > 1) {
+            if (!errors.includes("Phone already exists")) {
+              errors.push("Duplicate phone in file");
+            }
+          }
+          
+          return {
+            ...contact,
+            errors,
+            isValid: errors.length === 0
+          };
+        });
+        
+        setParsedContacts(contactsWithDuplicateErrors);
+        setCampaignData(prev => ({ ...prev, contacts: file }));
+      } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        // Handle Excel
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        
+        if (jsonData.length === 0) {
+          alert("Excel file is empty");
+          return;
+        }
+        
+        const headers = (jsonData[0] as any[]).map((h: any) => String(h || '').trim().toLowerCase());
+        const nameIndex = headers.findIndex(h => h === 'name');
+        const phoneIndex = headers.findIndex(h => h === 'phone');
+        const emailIndex = headers.findIndex(h => h === 'email');
+        
+        if (nameIndex === -1 || phoneIndex === -1 || emailIndex === -1) {
+          alert("Excel file must contain 'name', 'phone', and 'email' columns");
+          return;
+        }
+        
+        // Create sets of existing emails and phones for quick lookup
+        // Note: storeCustomers is already filtered by current user, so duplicates are checked only within the current user's customers
+        const existingEmails = new Set(storeCustomers.map(c => c.email.toLowerCase().trim()));
+        const existingPhones = new Set(storeCustomers.map(c => c.phone.trim()));
+        
+        // Track duplicates within the file itself
+        const fileEmails = new Map<string, number>();
+        const filePhones = new Map<string, number>();
+        
+        const contacts = jsonData.slice(1).map((row: any[], index: number) => {
+          const name = String(row[nameIndex] || '').trim();
+          const phone = String(row[phoneIndex] || '').trim();
+          const email = String(row[emailIndex] || '').trim();
+          
+          const errors: string[] = [];
+          if (!name) errors.push("Name is required");
+          if (!phone) errors.push("Phone is required");
+          if (!email) errors.push("Email is required");
+          
+          // Check for duplicates in existing customers
+          if (email && existingEmails.has(email.toLowerCase().trim())) {
+            errors.push("Email already exists");
+          }
+          if (phone && existingPhones.has(phone.trim())) {
+            errors.push("Phone already exists");
+          }
+          
+          // Track duplicates within the file
+          if (email) {
+            const emailKey = email.toLowerCase().trim();
+            fileEmails.set(emailKey, (fileEmails.get(emailKey) || 0) + 1);
+          }
+          if (phone) {
+            filePhones.set(phone.trim(), (filePhones.get(phone.trim()) || 0) + 1);
+          }
+          
+          return {
+            name,
+            phone,
+            email,
+            row: index + 2, // +2 because index starts at 0 and we skip header
+            isValid: errors.length === 0,
+            errors
+          };
+        });
+        
+        // Check for duplicates within the file and add errors
+        const contactsWithDuplicateErrors = contacts.map(contact => {
+          const errors = [...contact.errors];
+          const emailKey = contact.email.toLowerCase().trim();
+          const phoneKey = contact.phone.trim();
+          
+          if (contact.email && fileEmails.get(emailKey)! > 1) {
+            if (!errors.includes("Email already exists")) {
+              errors.push("Duplicate email in file");
+            }
+          }
+          if (contact.phone && filePhones.get(phoneKey)! > 1) {
+            if (!errors.includes("Phone already exists")) {
+              errors.push("Duplicate phone in file");
+            }
+          }
+          
+          return {
+            ...contact,
+            errors,
+            isValid: errors.length === 0
+          };
+        });
+        
+        setParsedContacts(contactsWithDuplicateErrors);
+        setCampaignData(prev => ({ ...prev, contacts: file }));
+      } else {
+        alert("Unsupported file format. Please upload CSV, XLS, or XLSX file.");
+      }
+    } catch (error) {
+      console.error("Error parsing file:", error);
+      alert("Error parsing file. Please make sure the file format is correct.");
     }
   };
 
-  const getQuestionNumber = (questionId: string) => {
-    const index = surveyData.questions.findIndex(q => q.id === questionId);
-    return index + 1;
-  };
+  const handleCreateCampaign = async () => {
+    try {
+      if (!userId) {
+        alert("User not authenticated. Please sign in again.");
+        return;
+      }
 
-  const nextPreviewQuestion = () => {
-    if (currentPreviewQuestion < surveyData.questions.length - 1) {
-      setCurrentPreviewQuestion(prev => prev + 1);
+      if (!campaignData.name) {
+        alert("Campaign name is required");
+        return;
+      }
+
+      // Prepare contacts array (full JSON objects)
+      let contacts: Array<{ name: string; phone: string; email: string; filled?: false }> = [];
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+      
+      if (campaignData.contactMethod === "upload") {
+        // Check for duplicate errors
+        const hasDuplicateErrors = parsedContacts.some(c => 
+          c.errors.some(error => 
+            error.includes("already exists") || error.includes("Duplicate")
+          )
+        );
+
+        if (hasDuplicateErrors) {
+          alert("Please fix duplicate email or phone number errors before creating the campaign. Contacts with duplicates are highlighted in red.");
+          return;
+        }
+
+        // Use valid parsed contacts
+        contacts = parsedContacts
+          .filter(c => c.isValid)
+          .map(c => ({
+            name: c.name,
+            phone: c.phone,
+            email: c.email
+          }));
+        
+        if (contacts.length === 0) {
+          alert("Please upload a file with valid contacts (all contacts must have name, phone, and email)");
+          return;
+        }
+      } else {
+        // Use selected customers from existing customers
+        const selectedCustomersData = existingCustomers.filter(c => 
+          campaignData.selectedCustomers.includes(c.id)
+        );
+        
+        contacts = selectedCustomersData.map(c => ({
+          name: c.name,
+          phone: c.phone,
+          email: c.email
+        }));
+        
+        if (contacts.length === 0) {
+          alert("Please select at least one customer");
+          return;
+        }
+      }
+
+      // Prepare reward object
+      let reward: any = undefined;
+      if (campaignData.rewardType) {
+        if (campaignData.rewardType === "cash") {
+          const amount = parseFloat(campaignData.rewardValue);
+          if (!amount || amount <= 0) {
+            alert("Cash reward amount must be greater than 0");
+            return;
+          }
+          reward = {
+            type: "cash reward",
+            amount: amount
+          };
+        } else if (campaignData.rewardType === "promo") {
+          if (!campaignData.rewardValue) {
+            alert("Promo code is required");
+            return;
+          }
+          if (!campaignData.promoDescription) {
+            alert("Promo description is required");
+            return;
+          }
+          reward = {
+            type: "promo code",
+            code: campaignData.rewardValue,
+            description: campaignData.promoDescription
+          };
+        }
+      }
+
+      // Prepare request body with contacts (full JSON objects)
+      const requestBody = {
+        userId: userId,
+        name: campaignData.name,
+        description: campaignData.description || "",
+        message_template: campaignData.smsTemplate || "",
+        contacts: contacts, // Send full contact objects
+        reward: reward,
+        surveyId: campaignData.selectedSurveyId || undefined
+      };
+
+      const endpoint = `${baseUrl.replace(/\/+$/, "")}/campaigns`;
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Failed to create campaign", errorData);
+        alert(`Failed to create campaign: ${errorData.error || response.statusText}`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log("Campaign created successfully", data);
+      
+      // Add campaign to store
+      const createdCampaign = data?.campaign || data;
+      if (createdCampaign) {
+        addCampaign({
+          _id: createdCampaign._id || createdCampaign.id,
+          name: createdCampaign.name,
+          description: createdCampaign.description || "",
+          message_template: createdCampaign.message_template || "",
+          contacts: createdCampaign.contacts || contacts, // Store contacts (full JSON objects)
+          reward: createdCampaign.reward,
+          survey: createdCampaign.survey,
+          user: createdCampaign.user || userId,
+          createdAt: createdCampaign.createdAt,
+          updatedAt: createdCampaign.updatedAt,
+          responses: 0,
+          status: "active"
+        });
+      }
+      
+      alert("Campaign created successfully!");
+      
+      // Reset form
+      setIsOpen(false);
+      setCampaignData({
+        name: "",
+        description: "",
+        smsTemplate: "",
+        surveyLink: "",
+        selectedSurveyId: "",
+        contactMethod: "upload",
+        contacts: null,
+        selectedCustomers: [],
+        rewardType: "",
+        rewardValue: "",
+        promoDescription: "",
+        budget: ""
+      });
+      setParsedContacts([]);
+      setCurrentStep("details");
+    } catch (error) {
+      console.error("Error creating campaign:", error);
+      alert("An error occurred while creating the campaign. Please try again.");
     }
   };
 
-  const prevPreviewQuestion = () => {
-    if (currentPreviewQuestion > 0) {
-      setCurrentPreviewQuestion(prev => prev - 1);
-    }
-  };
 
   const isStepComplete = (step: string) => {
     switch (step) {
       case "details":
         return campaignData.name && campaignData.description;
       case "survey":
-        return surveyData.title && surveyData.questions.length > 0;
+        return !!campaignData.selectedSurveyId;
       case "sms":
         return campaignData.smsTemplate;
       case "contacts":
-        return campaignData.contactMethod === "upload" 
-          ? campaignData.contacts !== null
-          : campaignData.selectedCustomers.length > 0;
+        if (campaignData.contactMethod === "upload") {
+          // Check for duplicate errors
+          const hasDuplicateErrors = parsedContacts.some(c => 
+            c.errors.some(error => 
+              error.includes("already exists") || error.includes("Duplicate")
+            )
+          );
+          if (hasDuplicateErrors) return false;
+          return campaignData.contacts !== null && parsedContacts.length > 0 && parsedContacts.every(c => c.isValid);
+        }
+        return campaignData.selectedCustomers.length > 0;
       case "rewards":
-        return campaignData.rewardType && campaignData.rewardValue;
+        if (!campaignData.rewardType) return false;
+        if (campaignData.rewardType === "cash") {
+          const amount = parseFloat(campaignData.rewardValue);
+          return amount > 0;
+        } else if (campaignData.rewardType === "promo") {
+          return campaignData.rewardValue && campaignData.promoDescription;
+        }
+        return false;
       default:
         return false;
     }
@@ -316,7 +531,7 @@ export function CreateCampaignDialog() {
   // Calculate price based on contacts and rewards
   const calculatePrice = () => {
     const numberOfRecipients = campaignData.contactMethod === "upload" 
-      ? 0 // Will be calculated after file upload
+      ? parsedContacts.filter(c => c.isValid).length // Use valid parsed contacts
       : campaignData.selectedCustomers.length;
     
     const rewardPerPerson = campaignData.rewardType === "cash" 
@@ -343,7 +558,7 @@ export function CreateCampaignDialog() {
 
   const steps = [
     { id: "details", label: "Details", icon: FileText },
-    { id: "survey", label: "Create Survey", icon: MessageSquare },
+    { id: "survey", label: "Select Survey", icon: MessageSquare },
     { id: "sms", label: "SMS Template", icon: Mail },
     { id: "contacts", label: "Contacts", icon: Users },
     { id: "rewards", label: "Rewards", icon: Gift }
@@ -363,7 +578,7 @@ export function CreateCampaignDialog() {
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create New Campaign</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white text-left">Create New Campaign</h2>
           </div>
 
           {/* Progress Steps */}
@@ -429,7 +644,7 @@ export function CreateCampaignDialog() {
           {currentStep === "details" && (
             <div className="space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Campaign Details</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Campaign Details</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Set up the basic information for your feedback campaign</p>
                 
                 <div className="space-y-4">
@@ -458,411 +673,79 @@ export function CreateCampaignDialog() {
             </div>
           )}
 
-          {/* Create Survey Step */}
+          {/* Select Survey Step */}
           {currentStep === "survey" && (
             <div className="space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Create Survey</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Build your survey that customers will complete</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Select Survey</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose an existing survey or create a new one for this campaign</p>
                 
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="survey-title">Survey Title</Label>
-                    <InputField
-                      id="survey-title"
-                      placeholder="e.g., Product Feedback Survey"
-                      defaultValue={surveyData.title}
-                      onChange={(e) => setSurveyData(prev => ({ ...prev, title: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="survey-description">Survey Description</Label>
-                    <textarea
-                      id="survey-description"
-                      placeholder="Tell respondents what this survey is about..."
-                      value={surveyData.description}
-                      onChange={(e) => setSurveyData(prev => ({ ...prev, description: e.target.value }))}
-                      rows={2}
-                      className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Survey Builder */}
-                <div className="space-y-4">
-                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Questions</h4>
-                      <Button onClick={addQuestion} size="sm" startIcon={<Plus className="w-4 h-4" />}>
-                        Add Question
-                      </Button>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      {surveyData.questions.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          <div className="w-12 h-12 mx-auto mb-3 opacity-50 flex items-center justify-center">
-                            <FileText className="w-8 h-8" />
-                          </div>
-                          <p className="font-medium">No questions yet</p>
-                          <p className="text-sm">Click &quot;Add Question&quot; to get started</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {surveyData.questions.map((question, index) => (
-                            <div
-                              key={question.id}
-                              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                                editingQuestionId === question.id
-                                  ? "border-theme-purple-500 bg-theme-purple-50"
-                                  : "border-gray-200 hover:border-theme-purple-300"
-                              }`}
-                              onClick={() => setEditingQuestionId(question.id)}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800">
-                                      {question.type}
-                                    </span>
-                                    {question.required && (
-                                      <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-red-100 text-red-800">
-                                        Required
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="font-medium text-sm truncate">
-                                    {question.title || `Question ${index + 1}`}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveQuestion(question.id, "up");
-                                    }}
-                                    disabled={index === 0}
-                                    className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 rounded hover:bg-gray-100 transition-colors"
-                                  >
-                                    <ArrowUp className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveQuestion(question.id, "down");
-                                    }}
-                                    disabled={index === surveyData.questions.length - 1}
-                                    className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 rounded hover:bg-gray-100 transition-colors"
-                                  >
-                                    <ArrowDown className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      duplicateQuestion(question.id);
-                                    }}
-                                    className="p-2 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 transition-colors"
-                                  >
-                                    <Copy className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteQuestion(question.id);
-                                    }}
-                                    className="p-2 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <Label htmlFor="survey-select">Select Survey</Label>
+                    <select
+                      id="survey-select"
+                      value={campaignData.selectedSurveyId}
+                      onChange={(e) => setCampaignData(prev => ({ ...prev, selectedSurveyId: e.target.value }))}
+                      className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                    >
+                      <option value="">-- Select a survey --</option>
+                      {surveys.map((survey) => (
+                        <option key={survey._id || survey.id} value={survey._id || survey.id}>
+                          {survey.title}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Question Editor */}
-                  {editingQuestionId && (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Edit Question</h4>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="question-title">Question Title</Label>
-                          <InputField
-                            id="question-title"
-                            placeholder="Enter your question"
-                            defaultValue={surveyData.questions.find(q => q.id === editingQuestionId)?.title || ""}
-                            onChange={(e) => updateQuestion(editingQuestionId, { title: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="question-description">Description (Optional)</Label>
-                          <textarea
-                            id="question-description"
-                            placeholder="Add a description if needed"
-                            value={surveyData.questions.find(q => q.id === editingQuestionId)?.description || ""}
-                            onChange={(e) => updateQuestion(editingQuestionId, { description: e.target.value })}
-                            rows={2}
-                            className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                          />
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="required"
-                            checked={surveyData.questions.find(q => q.id === editingQuestionId)?.required || false}
-                            onChange={(e) => updateQuestion(editingQuestionId, { required: e.target.checked })}
-                            className="rounded border-gray-300 text-theme-purple-600 focus:ring-theme-purple-500"
-                          />
-                          <Label htmlFor="required">Required field</Label>
-                        </div>
-                      </div>
-
-                      {/* Question Logic Section */}
-                      <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Filter className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                            <h5 className="text-lg font-semibold text-gray-900 dark:text-white">Question Logic</h5>
+                  {campaignData.selectedSurveyId && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                            {surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title}
+                          </h4>
+                          <p className="text-sm text-blue-800 dark:text-blue-200">
+                            {surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.description || "No description"}
+                          </p>
+                          <div className="mt-2 flex items-center gap-4 text-xs text-blue-700 dark:text-blue-300">
+                            <span>
+                              {Array.isArray(surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.questions) 
+                                ? surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.questions.length 
+                                : 0} questions
+                            </span>
+                            <span>
+                              Status: {surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.status || "draft"}
+                            </span>
                           </div>
-                          <button 
-                            onClick={() => setShowLogic(!showLogic)}
-                            className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 flex items-center gap-1"
-                          >
-                            {showLogic ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            {showLogic ? "Hide Logic" : "Show Logic"}
-                          </button>
                         </div>
-                        
-                        {showLogic && (
-                          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                            <h6 className="font-medium text-gray-900 dark:text-white mb-3">Conditional Logic</h6>
-                            
-                            {surveyData.questions.find(q => q.id === editingQuestionId)?.logicRules && surveyData.questions.find(q => q.id === editingQuestionId)!.logicRules.length > 0 ? (
-                              <div className="space-y-3">
-                                {surveyData.questions.find(q => q.id === editingQuestionId)?.logicRules.map((rule, index) => (
-                                  <div key={rule.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 p-4">
-                                    <div className="flex items-center justify-between mb-3">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Rule {index + 1}</span>
-                                        {rule.value && rule.action && (
-                                          <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                                            If answer {rule.condition} &quot;{rule.value}&quot; then {rule.action} 
-                                            {rule.targetQuestionId && ` Question ${getQuestionNumber(rule.targetQuestionId)}`}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <button
-                                        onClick={() => deleteLogicRule(editingQuestionId, rule.id)}
-                                        className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                              
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Condition</label>
-                                        <select
-                                          value={rule.condition}
-                                          onChange={(e) => updateLogicRule(editingQuestionId, rule.id, { 
-                                            condition: e.target.value as LogicRule['condition'] 
-                                          })}
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                        >
-                                          <option value="equals">Equals</option>
-                                          <option value="not_equals">Not Equals</option>
-                                          <option value="contains">Contains</option>
-                                          <option value="greater_than">Greater Than</option>
-                                          <option value="less_than">Less Than</option>
-                                        </select>
-                                      </div>
-                                      
-                                      <div>
-                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Value</label>
-                                        <input
-                                          type="text"
-                                          value={rule.value}
-                                          onChange={(e) => updateLogicRule(editingQuestionId, rule.id, { value: e.target.value })}
-                                          placeholder="Enter value"
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                        />
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="mt-3">
-                                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Action</label>
-                                      <select
-                                        value={rule.action}
-                                        onChange={(e) => updateLogicRule(editingQuestionId, rule.id, { 
-                                          action: e.target.value as LogicRule['action'] 
-                                        })}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                      >
-                                        <option value="show">Show...</option>
-                                        <option value="hide">Hide...</option>
-                                        <option value="skip_to">Jump to...</option>
-                                      </select>
-                                    </div>
-                              
-                                    {/* Target Question Selection - Only show for hide and skip_to actions */}
-                                    {(rule.action === "hide" || rule.action === "skip_to") && (
-                                      <div className="mt-3">
-                                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                          {rule.action === "hide" ? "Hide Question" : "Jump to Question"}
-                                        </label>
-                                        <select
-                                          value={rule.targetQuestionId || ""}
-                                          onChange={(e) => updateLogicRule(editingQuestionId, rule.id, { 
-                                            targetQuestionId: e.target.value 
-                                          })}
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                                        >
-                                          <option value="">Select a question...</option>
-                                          {surveyData.questions
-                                            .filter(q => q.id !== editingQuestionId)
-                                            .map(q => (
-                                              <option key={q.id} value={q.id}>
-                                                Question {getQuestionNumber(q.id)}: {q.title || `Untitled Question`}
-                                              </option>
-                                            ))}
-                                        </select>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-center py-4">
-                                <Filter className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                <p className="text-sm text-gray-500 dark:text-gray-400">No logic rules added</p>
-                              </div>
-                            )}
-                            
-                            <button
-                              onClick={() => addLogicRule(editingQuestionId)}
-                              className="w-full mt-4 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
-                            >
-                              <Plus className="w-4 h-4" />
-                              Add Logic Rule
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
-                </div>
 
-                {/* Survey Preview */}
-                <div className="lg:sticky lg:top-4">
-                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Live Preview</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">How your survey will look to respondents</p>
-                    
-                    <div className="space-y-4">
-                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                        <h5 className="font-medium text-gray-900 dark:text-white">{surveyData.title || "Survey Title"}</h5>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{surveyData.description || "Survey description"}</p>
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <div className="relative my-4">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
                       </div>
-                      
-                      {/* Progress Bar */}
-                      <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-600">
-                        <div 
-                          className="bg-purple-500 h-2 rounded-full transition-all duration-300" 
-                          style={{ 
-                            width: surveyData.questions.length > 0 
-                              ? `${((currentPreviewQuestion + 1) / surveyData.questions.length) * 100}%` 
-                              : "0%" 
-                          }}
-                        ></div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">or</span>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Question {surveyData.questions.length > 0 ? currentPreviewQuestion + 1 : 0} of {surveyData.questions.length}
-                      </p>
-                      
-                      {/* Single Question Display */}
-                      {surveyData.questions.length === 0 ? (
-                        <div className="text-center py-8">
-                          <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-500 dark:text-gray-400">No questions yet</p>
-                          <p className="text-sm text-gray-400 dark:text-gray-500">Add questions to see preview</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                Question {currentPreviewQuestion + 1}
-                              </span>
-                              {surveyData.questions[currentPreviewQuestion].required && (
-                                <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400">
-                                  Required
-                                </span>
-                              )}
-                              {surveyData.questions[currentPreviewQuestion].logicRules.length > 0 && (
-                                <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                                  Logic ({surveyData.questions[currentPreviewQuestion].logicRules.length})
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-900 dark:text-white mb-2">
-                              {surveyData.questions[currentPreviewQuestion].title || "Question title"}
-                            </p>
-                            {surveyData.questions[currentPreviewQuestion].description && (
-                              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-                                {surveyData.questions[currentPreviewQuestion].description}
-                              </p>
-                            )}
-                            <input
-                              type="text"
-                              placeholder="Enter your text"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                            />
-                            {surveyData.questions[currentPreviewQuestion].logicRules.length > 0 && (
-                              <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
-                                <span className="font-medium">Logic rules:</span>
-                                {surveyData.questions[currentPreviewQuestion].logicRules.map((rule, ruleIndex) => (
-                                  <span key={rule.id} className="ml-1">
-                                    {ruleIndex > 0 && ", "}
-                                    {rule.condition} &quot;{rule.value}&quot; → {rule.action}
-                                    {rule.action === "skip_to" && rule.targetQuestionId && (
-                                      <span> (Q{getQuestionNumber(rule.targetQuestionId)})</span>
-                                    )}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Navigation Buttons */}
-                      {surveyData.questions.length > 0 && (
-                        <div className="flex justify-between mt-6">
-                          <button 
-                            onClick={prevPreviewQuestion}
-                            disabled={currentPreviewQuestion === 0}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                            Previous
-                          </button>
-                          
-                          <button 
-                            onClick={nextPreviewQuestion}
-                            disabled={currentPreviewQuestion === surveyData.questions.length - 1}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-purple-700 rounded-lg hover:from-purple-600 hover:to-purple-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Next
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
                     </div>
+                    <button
+                      onClick={() => {
+                        setIsOpen(false);
+                        window.location.href = '/create';
+                      }}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Create New Survey
+                    </button>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                      You'll be redirected to create a new survey. Come back here after creating it.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -873,7 +756,7 @@ export function CreateCampaignDialog() {
           {currentStep === "sms" && (
             <div className="space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">SMS Template & Survey Link</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">SMS Template & Survey Link</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Create the message and survey link that will be sent to your customers</p>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -915,7 +798,7 @@ export function CreateCampaignDialog() {
                       </p>
                       <div className="bg-white rounded border border-blue-200 p-2">
                         <code className="text-xs text-blue-900 break-all">
-                          https://yourdomain.com/survey/{surveyData.title.toLowerCase().replace(/\s+/g, '-') || 'untitled'}
+                          https://yourdomain.com/survey/{campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.toLowerCase().replace(/\s+/g, '-') || 'untitled') : 'untitled'}
                         </code>
                       </div>
                     </div>
@@ -940,7 +823,7 @@ export function CreateCampaignDialog() {
                       ? campaignData.smsTemplate
                           .replace("{name}", "John Doe")
                           .replace("{reward}", "$5 cash reward")
-                          .replace("{link}", `yourdomain.com/s/${surveyData.title.substring(0, 6) || 'survey'}`)
+                          .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`)
                       : "Your personalized SMS message will appear here..."}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
@@ -948,7 +831,7 @@ export function CreateCampaignDialog() {
                       ? campaignData.smsTemplate
                           .replace("{name}", "John Doe")
                           .replace("{reward}", "$5 cash reward")
-                          .replace("{link}", `yourdomain.com/s/${surveyData.title.substring(0, 6) || 'survey'}`).length
+                          .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`).length
                       : 0}/160
                   </p>
                 </div>
@@ -960,7 +843,7 @@ export function CreateCampaignDialog() {
           {currentStep === "contacts" && (
             <div className="space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Select Contacts</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Select Contacts</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose how you want to add contacts to this campaign</p>
                 
                 <div className="space-y-6">
@@ -968,17 +851,33 @@ export function CreateCampaignDialog() {
                   <div className="flex space-x-4">
                     <Button
                       variant={campaignData.contactMethod === "upload" ? "primary" : "outline"}
-                      onClick={() => setCampaignData(prev => ({ ...prev, contactMethod: "upload", selectedCustomers: [] }))}
+                      onClick={() => {
+                        setCampaignData(prev => ({ 
+                          ...prev, 
+                          contactMethod: "upload", 
+                          selectedCustomers: [],
+                          contacts: null
+                        }));
+                        setParsedContacts([]);
+                      }}
                        startIcon={<Plus className="w-4 h-4" />}
                     >
                       Upload New Contacts
                     </Button>
                     <Button
                       variant={campaignData.contactMethod === "previous" ? "primary" : "outline"}
-                      onClick={() => setCampaignData(prev => ({ ...prev, contactMethod: "previous", contacts: null }))}
+                      onClick={() => {
+                        setCampaignData(prev => ({ 
+                          ...prev, 
+                          contactMethod: "previous", 
+                          contacts: null,
+                          selectedCustomers: []
+                        }));
+                        setParsedContacts([]);
+                      }}
                        startIcon={<Users className="w-4 h-4" />}
                     >
-                      Select from Previous Campaigns
+                      Select from Preexisting Customers
                     </Button>
                   </div>
 
@@ -1039,7 +938,10 @@ export function CreateCampaignDialog() {
                                     </div>
                                   </div>
                                   <button
-                                    onClick={() => setCampaignData(prev => ({ ...prev, contacts: null }))}
+                                    onClick={() => {
+                                      setCampaignData(prev => ({ ...prev, contacts: null }));
+                                      setParsedContacts([]);
+                                    }}
                                     className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                   >
                                     <X className="w-4 h-4" />
@@ -1088,39 +990,136 @@ export function CreateCampaignDialog() {
                               <span><strong>phone</strong> - Phone with country code</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                              <span><strong>email</strong> - Optional backup contact</span>
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <span><strong>email</strong> - Email address (Required)</span>
                             </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Display Parsed Contacts */}
+                      {parsedContacts.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
+                              Parsed Contacts ({parsedContacts.length})
+                            </h4>
+                            <div className="flex items-center gap-4 text-sm">
+                              <span className="text-green-600 dark:text-green-400">
+                                Valid: {parsedContacts.filter(c => c.isValid).length}
+                              </span>
+                              <span className="text-red-600 dark:text-red-400">
+                                Invalid: {parsedContacts.filter(c => !c.isValid).length}
+                              </span>
+                            </div>
+                          </div>
+
+                          {parsedContacts.filter(c => !c.isValid).length > 0 && (
+                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
+                              <div className="flex items-center gap-2 text-red-800 dark:text-red-200">
+                                <AlertCircle className="w-5 h-5" />
+                                <p className="font-medium">
+                                  Some contacts have errors (missing fields, duplicate emails, or duplicate phone numbers). Please fix these issues before proceeding.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table className="w-full border-collapse">
+                              <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Row</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Phone</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {parsedContacts.map((contact, index) => (
+                                  <tr 
+                                    key={index} 
+                                    className={contact.isValid 
+                                      ? "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700" 
+                                      : "bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                    }
+                                  >
+                                    <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm text-gray-900 dark:text-white">
+                                      {contact.row}
+                                    </td>
+                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${
+                                      contact.name 
+                                        ? "text-gray-900 dark:text-white" 
+                                        : "text-red-600 dark:text-red-400 font-medium"
+                                    }`}>
+                                      {contact.name || "Missing"}
+                                    </td>
+                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${
+                                      contact.phone 
+                                        ? "text-gray-900 dark:text-white" 
+                                        : "text-red-600 dark:text-red-400 font-medium"
+                                    }`}>
+                                      {contact.phone || "Missing"}
+                                    </td>
+                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${
+                                      contact.email 
+                                        ? "text-gray-900 dark:text-white" 
+                                        : "text-red-600 dark:text-red-400 font-medium"
+                                    }`}>
+                                      {contact.email || "Missing"}
+                                    </td>
+                                    <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm">
+                                      {contact.isValid ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                          <CheckCircle className="w-3 h-3" />
+                                          Valid
+                                        </span>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                                            <AlertCircle className="w-3 h-3" />
+                                            Invalid
+                                          </span>
+                                          <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                            {contact.errors.join(", ")}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                              JSON Data:
+                            </p>
+                            <pre className="text-xs bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600 overflow-x-auto text-gray-900 dark:text-white max-h-48 overflow-y-auto">
+                              {JSON.stringify(parsedContacts.map(c => ({ name: c.name, phone: c.phone, email: c.email })), null, 2)}
+                            </pre>
+                          </div> */}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Select from Previous Campaigns */}
+                  {/* Select from Preexisting Customers */}
                   {campaignData.contactMethod === "previous" && (
                     <div className="space-y-4">
-                      {/* Search and Filter */}
+                      {/* Search */}
                       <div className="flex flex-col sm:flex-row gap-4">
                         <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                           <InputField
-                            placeholder="Search customers..."
+                            placeholder="Search customers by name, email, or phone..."
                             defaultValue={customerSearch}
                             onChange={(e) => setCustomerSearch(e.target.value)}
                             className="pl-10"
                           />
                         </div>
-                        <select 
-                          value={customerFilter} 
-                          onChange={(e) => setCustomerFilter(e.target.value)}
-                          className="h-11 w-full sm:w-48 rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                        >
-                          <option value="all">All Customers</option>
-                          <option value="completed">Completed</option>
-                          <option value="partial">Partial</option>
-                          <option value="not_started">Not Started</option>
-                        </select>
                       </div>
 
                       {/* Select All */}
@@ -1156,15 +1155,9 @@ export function CreateCampaignDialog() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
                                 <p className="font-medium text-sm text-gray-900 dark:text-white">{customer.name}</p>
-                                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                  customer.status === "completed" ? "bg-blue-100 text-blue-800" :
-                                  customer.status === "partial" ? "bg-gray-100 text-gray-800" : "bg-gray-100 text-gray-800"
-                                }`}>
-                                  {customer.status.replace("_", " ")}
-                                </span>
                               </div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">{customer.email}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">Last campaign: {customer.lastCampaign}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{customer.phone}</p>
                             </div>
                           </div>
                         ))}
@@ -1200,7 +1193,7 @@ export function CreateCampaignDialog() {
           {currentStep === "rewards" && (
             <div className="space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Reward Configuration</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Reward Configuration</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Set up the rewards customers will receive for completing feedback</p>
                 
                 <div className="space-y-4">
@@ -1223,10 +1216,34 @@ export function CreateCampaignDialog() {
                       <InputField
                         id="cash-amount"
                         type="number"
+                        min="1"
+                        step={1}
                         placeholder="5.00"
                         defaultValue={campaignData.rewardValue}
-                        onChange={(e) => setCampaignData(prev => ({ ...prev, rewardValue: e.target.value }))}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Allow empty string for clearing
+                          if (value === "") {
+                            setCampaignData(prev => ({ ...prev, rewardValue: "" }));
+                            return;
+                          }
+                          
+                          const numValue = parseFloat(value);
+                          // Only update if it's a valid positive number greater than 0
+                          if (!isNaN(numValue) && numValue > 0) {
+                            setCampaignData(prev => ({ ...prev, rewardValue: value }));
+                          } else {
+                            // Prevent invalid input by reverting to last valid value
+                            e.target.value = campaignData.rewardValue || "";
+                          }
+                        }}
+                        error={campaignData.rewardValue ? parseFloat(campaignData.rewardValue) <= 0 : false}
                       />
+                      {campaignData.rewardValue && parseFloat(campaignData.rewardValue) <= 0 && (
+                        <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                          Cash amount must be greater than 0
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1246,6 +1263,8 @@ export function CreateCampaignDialog() {
                         <InputField
                           id="promo-description"
                           placeholder="20% off your next purchase"
+                          defaultValue={campaignData.promoDescription}
+                          onChange={(e) => setCampaignData(prev => ({ ...prev, promoDescription: e.target.value }))}
                         />
                       </div>
                     </div>
@@ -1253,7 +1272,7 @@ export function CreateCampaignDialog() {
 
                   {campaignData.rewardType && (
                     <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6 dark:from-purple-900/20 dark:to-pink-900/20 dark:border-purple-700">
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center">
+                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center text-left">
                         <Gift className="w-5 h-5 mr-2 text-purple-600 dark:text-purple-400" />
                         Reward Configuration
                       </h4>

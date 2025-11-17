@@ -27,6 +27,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 type QuestionType = "short-text" | "long-text" | "multiple-choice" | "single-choice" | "rating-scale" | "date" | "email" | "phone" | "number";
 
@@ -57,6 +58,7 @@ interface Survey {
   thankYouMessage: string;
   goal : string;
   user : string;
+  status?: string;
 }
 
 const questionTypes = [
@@ -71,23 +73,217 @@ const questionTypes = [
   { id: "number", label: "Number", icon: <Hash className="w-4 h-4" />, description: "Numeric input" }
 ];
 
-export default function CreateSurvey() {
+export default function CreateSurvey({ surveyId }: { surveyId?: string }) {
+  const searchParams = useSearchParams();
+  const template = searchParams.get("template");
   const [activeTab, setActiveTab] = useState<"builder" | "settings">("builder");
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
   const [showLogic, setShowLogic] = useState(false);
   const [currentPreviewQuestion, setCurrentPreviewQuestion] = useState(0);
+  const [isLoading, setIsLoading] = useState(!!surveyId);
   const { data: session } = useSession();
   const userId = (session as any)?.user?.id;
-  const { addSurvey } = useSurveysStore();
-  const [survey, setSurvey] = useState<Survey>({
-    title: "Untitled Survey",
-    description: "Survey description",
-    questions: [],
-    thankYouMessage: "Thank you for your feedback!",
-    goal: "Goal",
-    user: userId
-  });
+  const { addSurvey, updateSurvey, setSurveys, surveys } = useSurveysStore();
 
+  const [survey, setSurvey] = useState<Survey>(
+      !template ? {
+          title: "Untitled Survey",
+          description: "Survey description",
+          questions: [],
+          thankYouMessage: "Thank you for your feedback!",
+          goal: "Goal",
+          user: userId
+      } : template === "product-feedback" ? {
+        "title": "Untitled Survey",
+        "description": "Survey description",
+        "questions": [
+            {
+                "id": "1",
+                "type": "short-text",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "order": 0
+            },
+            {
+                "id": "2",
+                "type": "long-text",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "order": 1
+            },
+            {
+                "id": "3",
+                "type": "multiple-choice",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "options": [
+                    "Option 1",
+                    "Option 2"
+                ],
+                "order": 2
+            },
+            {
+                "id": "4",
+                "type": "single-choice",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "options": [
+                    "Option 1",
+                    "Option 2"
+                ],
+                "order": 3
+            },
+            {
+                "id": "5",
+                "type": "rating-scale",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "ratingMax": 5,
+                "order": 4
+            },
+            {
+                "id": "6",
+                "type": "date",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "order": 5
+            },
+            {
+                "id": "7",
+                "type": "email",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "order": 6
+            },
+            {
+                "id": "8",
+                "type": "phone",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "order": 7
+            },
+            {
+                "id": "9",
+                "type": "number",
+                "title": "Untitled Question",
+                "description": "",
+                "required": false,
+                "order": 8
+            }
+        ],
+        "thankYouMessage": "Thank you for your feedback!",
+        "goal": "product feedback",
+        "user": userId || ""
+      } : template === "customer-satisfaction" ? {
+        title: "Untitled Survey",
+        description: "Survey description",
+        questions: [],
+        thankYouMessage: "Thank you for your feedback!",
+        goal: "Goal",
+        user: userId
+      } : template === "market-research" ? {
+        title: "Untitled Survey",
+        description: "Survey description",
+        questions: [],
+        thankYouMessage: "Thank you for your feedback!",
+        goal: "Goal",
+        user: userId
+      } : {
+        title: "Untitled Survey",
+        description: "Survey description",
+        questions: [],
+        thankYouMessage: "Thank you for your feedback!",
+        goal: "Goal",
+        user: userId
+      }
+  );
+
+  // Load survey data from local store when editing
+  useEffect(() => {
+    if (!surveyId) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Wait for surveys to be loaded (retry mechanism)
+    const findSurveyInStore = (surveysList: typeof surveys) => {
+      const foundSurvey = surveysList.find(
+        (s) => s._id === surveyId || s.id === surveyId
+      );
+
+      if (foundSurvey) {
+        setSurvey({
+          title: foundSurvey.title || "Untitled Survey",
+          description: foundSurvey.description || "",
+          questions: foundSurvey.questions || [],
+          thankYouMessage: foundSurvey.thankYouMessage || "Thank you for your feedback!",
+          goal: foundSurvey.goal || "",
+          user: foundSurvey.user || userId || "",
+          status: foundSurvey.status || "draft",
+        });
+        setIsLoading(false);
+        return true;
+      }
+      return false;
+    };
+
+    // Try to find survey immediately
+    if (findSurveyInStore(surveys)) {
+      return;
+    }
+
+    // If surveys array is empty, wait a bit for store to load, then retry
+    if (surveys.length === 0) {
+      let retryCount = 0;
+      const maxRetries = 50; // 5 seconds (50 * 100ms) - increased timeout
+      let intervalId: NodeJS.Timeout | null = null;
+      
+      intervalId = setInterval(() => {
+        retryCount++;
+        // Re-check surveys from store on each retry
+        const currentSurveys = useSurveysStore.getState().surveys;
+        
+        if (findSurveyInStore(currentSurveys)) {
+          if (intervalId) clearInterval(intervalId);
+        } else if (retryCount >= maxRetries) {
+          if (intervalId) clearInterval(intervalId);
+          const finalSurveys = useSurveysStore.getState().surveys;
+          if (finalSurveys.length === 0) {
+            console.error("Surveys not loaded in store after waiting");
+            alert("Unable to load survey. The surveys list is still loading. Please wait a moment and try again.");
+            setIsLoading(false);
+            window.location.href = '/surveys';
+          } else {
+            // Surveys loaded but survey not found
+            console.error("Survey not found in local store. Survey ID:", surveyId, "Available surveys:", finalSurveys.map(s => s._id || s.id));
+            alert("Survey not found. Please try again.");
+            setIsLoading(false);
+            window.location.href = '/surveys';
+          }
+        }
+      }, 100); // Check every 100ms
+
+      return () => {
+        if (intervalId) clearInterval(intervalId);
+      };
+    } else {
+      // Surveys are loaded but survey not found
+      console.error("Survey not found in local store. Survey ID:", surveyId, "Available surveys:", surveys.map(s => s._id || s.id));
+      alert("Survey not found. Please try again.");
+      setIsLoading(false);
+      window.location.href = '/surveys';
+    }
+  }, [surveyId, surveys, userId]);
+
+  
   const addQuestion = (type: QuestionType) => {
     const newQuestion: Question = {
       id: Date.now().toString(),
@@ -222,7 +418,6 @@ export default function CreateSurvey() {
 
   const handleSave = async () => {
     try {
-
       if (!survey.title || survey.title.trim() === "") {
         alert("Please enter a survey title");
         return;
@@ -236,6 +431,7 @@ export default function CreateSurvey() {
       }
 
       const endpoint = `${baseUrl.replace(/\/+$/, "")}/surveys`;
+      
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -248,6 +444,7 @@ export default function CreateSurvey() {
           questions: survey.questions || [],
           thankYouMessage: survey.thankYouMessage || "",
           goal: survey.goal || "",
+          status: survey.status || "draft",
         }),
       });
 
@@ -261,28 +458,137 @@ export default function CreateSurvey() {
       const data = await response.json();
       console.log("Survey saved successfully", data);
       
-      // Add survey to store
-      const savedSurvey = data.survey || data;
-      if (savedSurvey) {
-        addSurvey({
-          title: savedSurvey.title || survey.title,
-          description: savedSurvey.description || survey.description,
-          questions: savedSurvey.questions || survey.questions,
-          thankYouMessage: savedSurvey.thankYouMessage || survey.thankYouMessage,
-          goal: savedSurvey.goal || survey.goal,
-          user: savedSurvey.user || survey.user || userId,
-          _id: savedSurvey._id,
-          status: savedSurvey.status || "draft",
-          responses: savedSurvey.responses || 0,
-          createdAt: savedSurvey.createdAt,
-          updatedAt: savedSurvey.updatedAt,
-        });
+      // After successful save, refetch all surveys to sync store with database
+      if (userId) {
+        try {
+          const fetchAllSurveysEndpoint = `${baseUrl.replace(/\/+$/, "")}/surveys?userId=${encodeURIComponent(userId)}`;
+          const surveysResponse = await fetch(fetchAllSurveysEndpoint, {
+            method: "GET",
+          });
+          
+          if (surveysResponse.ok) {
+            const surveysData = await surveysResponse.json().catch(() => null);
+            const allSurveys = surveysData?.surveys || surveysData?.survey || (Array.isArray(surveysData) ? surveysData : []);
+            if (Array.isArray(allSurveys)) {
+              // Update store with latest surveys from database
+              setSurveys(allSurveys);
+            }
+          }
+        } catch (fetchError) {
+          console.error("Error fetching updated surveys:", fetchError);
+          // If refetch fails, still add survey to store
+          const savedSurvey = data.survey || data;
+          if (savedSurvey) {
+            addSurvey({
+              title: savedSurvey.title || survey.title,
+              description: savedSurvey.description || survey.description,
+              questions: savedSurvey.questions || survey.questions,
+              thankYouMessage: savedSurvey.thankYouMessage || survey.thankYouMessage,
+              goal: savedSurvey.goal || survey.goal,
+              user: savedSurvey.user || survey.user || userId,
+              _id: savedSurvey._id,
+              status: savedSurvey.status || "draft",
+              responses: savedSurvey.responses || 0,
+              createdAt: savedSurvey.createdAt,
+              updatedAt: savedSurvey.updatedAt,
+            });
+          }
+        }
       }
       
       alert("Survey saved successfully!");
+      window.location.href = '/surveys';
     } catch (error) {
       console.error("Error saving survey:", error);
       alert("An error occurred while saving the survey. Please try again.");
+    }
+  };
+
+  const handleUpdate = async () => {
+    try {
+      if (!surveyId) {
+        alert("Survey ID is missing. Cannot update.");
+        return;
+      }
+
+      if (!survey.title || survey.title.trim() === "") {
+        alert("Please enter a survey title");
+        return;
+      }
+
+      const baseUrl = process.env.BACKEND_URL || "http://localhost:5000";
+      if (!baseUrl) {
+        console.error("BACKEND_URL");
+        alert("API configuration error. Please contact support.");
+        return;
+      }
+
+      const endpoint = `${baseUrl.replace(/\/+$/, "")}/surveys/${surveyId}${userId ? `?userId=${encodeURIComponent(userId)}` : ""}`;
+      
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: survey.title,
+          description: survey.description || "",
+          questions: survey.questions || [],
+          thankYouMessage: survey.thankYouMessage || "",
+          goal: survey.goal || "",
+          status: survey.status || "draft",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Failed to update survey", errorData);
+        alert(`Failed to update survey: ${errorData.error || response.statusText}`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log("Survey updated successfully", data);
+      
+      // After successful update, refetch all surveys to sync store with database
+      if (userId) {
+        try {
+          const fetchAllSurveysEndpoint = `${baseUrl.replace(/\/+$/, "")}/surveys?userId=${encodeURIComponent(userId)}`;
+          const surveysResponse = await fetch(fetchAllSurveysEndpoint, {
+            method: "GET",
+          });
+          
+          if (surveysResponse.ok) {
+            const surveysData = await surveysResponse.json().catch(() => null);
+            const allSurveys = surveysData?.surveys || surveysData?.survey || (Array.isArray(surveysData) ? surveysData : []);
+            if (Array.isArray(allSurveys)) {
+              // Update store with latest surveys from database
+              setSurveys(allSurveys);
+            }
+          }
+        } catch (fetchError) {
+          console.error("Error fetching updated surveys:", fetchError);
+          // If refetch fails, still update store with the updated survey data
+          const updatedSurvey = data.survey || data;
+          if (updatedSurvey) {
+            updateSurvey(surveyId, {
+              title: updatedSurvey.title || survey.title,
+              description: updatedSurvey.description || survey.description,
+              questions: updatedSurvey.questions || survey.questions,
+              thankYouMessage: updatedSurvey.thankYouMessage || survey.thankYouMessage,
+              goal: updatedSurvey.goal || survey.goal,
+              status: updatedSurvey.status || "draft",
+              updatedAt: updatedSurvey.updatedAt,
+            });
+          }
+        }
+      }
+      
+      alert("Survey updated successfully!");
+      window.location.href = '/surveys';
+    } catch (error) {
+      console.error("Error updating survey:", error);
+      alert("An error occurred while updating the survey. Please try again.");
     }
   };
 
@@ -348,6 +654,19 @@ export default function CreateSurvey() {
     }
   };
 
+  console.log("survey builder", survey);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading survey...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Top Bar */}
@@ -358,8 +677,12 @@ export default function CreateSurvey() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="min-w-0 flex-1">
-              <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">Survey Builder</h1>
-              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">Create and customize your survey</p>
+              <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
+                {surveyId ? "Edit Survey" : "Survey Builder"}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hidden sm:block">
+                {surveyId ? "Edit and customize your survey" : "Create and customize your survey"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -372,12 +695,12 @@ export default function CreateSurvey() {
               Settings
             </button> */}
             <button 
-              onClick={handleSave}
+              onClick={surveyId ? handleUpdate : handleSave}
               className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base"
             >
               <Save className="w-4 h-4" />
-              <span className="hidden sm:inline">Save Survey</span>
-              <span className="sm:hidden">Save</span>
+              <span className="hidden sm:inline">{surveyId ? "Update Survey" : "Save Survey"}</span>
+              <span className="sm:hidden">{surveyId ? "Update" : "Save"}</span>
             </button>
           </div>
         </div>

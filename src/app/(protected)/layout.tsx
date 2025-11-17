@@ -9,6 +9,9 @@ import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
 import UserStoreInitializer from "@/context/UserStoreInitializer";
 import SurveyStoreInitializer from "@/context/SurveyStoreInitializer";
+import CampaignStoreInitializer from "@/context/CampaignStoreInitializer";
+import CustomerStoreInitializer from "@/context/CustomerStoreInitializer";
+import ResponseStoreInitializer from "@/context/ResponseStoreInitializer";
 
 export default function AdminLayout({
   children,
@@ -36,6 +39,9 @@ export default function AdminLayout({
     <div className="min-h-screen xl:flex">
       <UserStoreInitializer />
       <SurveyStoreInitializer />
+      <CampaignStoreInitializer />
+      <CustomerStoreInitializer />
+      <ResponseStoreInitializer />
       {/* Sidebar and Backdrop */}
       <AppSidebar />
       <Backdrop />
