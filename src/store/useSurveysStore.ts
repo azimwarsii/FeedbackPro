@@ -1,10 +1,11 @@
 import { create } from "zustand";
+import { Question } from "@/types/survey";
 
 export interface Survey {
 	id?: string;
 	title: string;
 	description: string;
-	questions: any[];
+	questions: Question[];
 	thankYouMessage: string;
 	goal: string;
 	user: string;

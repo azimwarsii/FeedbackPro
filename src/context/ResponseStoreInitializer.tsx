@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useResponseStore } from "@/store/useResponseStore";
+import { SessionUser } from "@/types/session";
 
 export default function ResponseStoreInitializer() {
 	const { data: session, status } = useSession();
@@ -11,8 +12,8 @@ export default function ResponseStoreInitializer() {
 	useEffect(() => {
 		if (status === "authenticated" && session?.user) {
 			const run = async () => {
-				const safeUser = session?.user as any;
-				const userId = safeUser?.id as string | undefined;
+				const safeUser = session.user as SessionUser;
+				const userId = safeUser?.id;
 				const baseUrl =
 					process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
 

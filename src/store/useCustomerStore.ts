@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { Response } from "@/store/useResponseStore";
+import { Invitation } from "@/types/customer";
 
 export interface Customer {
 	_id?: string;
@@ -6,8 +8,8 @@ export interface Customer {
 	name: string;
 	phone: string;
 	email: string;
-	responses?: any[];
-	invitations?: any[];
+	responses?: Response[];
+	invitations?: Invitation[];
 	reward_pending?: number;
 	reward_received?: number;
 	user: string; // User ID

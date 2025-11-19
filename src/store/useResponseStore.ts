@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { Answer } from "@/types/survey";
 
 export interface Response {
 	_id?: string;
@@ -8,7 +9,7 @@ export interface Response {
 	campaignId: string;
 	responders_email: string;
 	responders_phone: string;
-	answers: any[];
+	answers: Answer[];
 	started_at: string;
 	completed_at?: string;
 	bot_score?: number;
