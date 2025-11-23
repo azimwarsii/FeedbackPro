@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CreateCampaignDialog } from "./CreateCampaignDialog";
-import { MoreHorizontal, Edit, BarChart3, Copy, Trash2, Users, DollarSign, Calendar, Plus, Download, RefreshCw, Search, Filter, ChevronDown, Pause, Play, Tag } from "lucide-react";
+import { MoreHorizontal, BarChart3, Copy, Trash2, Users, DollarSign, Calendar, Download, Search, Filter, ChevronDown, Pause, Play, Tag } from "lucide-react";
 import { useCampaignStore, Campaign as StoreCampaign } from "@/store/useCampaignStore";
 import { useSession } from "next-auth/react";
+import { SessionUser } from "@/types/session";
 
 type Status = "Active" | "Paused" | "Completed";
 
@@ -181,8 +182,8 @@ export default function Campaigns() {
   };
 
   const handleToggleStatus = async (campaignId: string, currentStatus: Status, action: "pause" | "start") => {
-    const safeUser = session?.user as any;
-    const userId = safeUser?.id as string | undefined;
+    const safeUser = session?.user as SessionUser;
+    const userId = safeUser?.id;
 
     if (!userId) {
       alert("You must be logged in to update a campaign.");
@@ -212,9 +213,6 @@ export default function Campaigns() {
       );
 
       if (response.ok) {
-        const data = await response.json();
-        const updatedCampaign = data?.campaign || data;
-        
         // Update campaign in local store with the new status
         updateCampaign(campaignId, {
           status: newStatus,
@@ -241,8 +239,8 @@ export default function Campaigns() {
       return;
     }
 
-    const safeUser = session?.user as any;
-    const userId = safeUser?.id as string | undefined;
+    const safeUser = session?.user as SessionUser;
+    const userId = safeUser?.id;
 
     if (!userId) {
       alert("You must be logged in to delete a campaign.");

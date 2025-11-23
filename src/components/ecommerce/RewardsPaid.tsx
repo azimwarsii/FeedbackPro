@@ -16,7 +16,6 @@ export default function MonthlySalesChart() {
 
   // Calculate monthly rewards paid from responses
   const monthlyData = useMemo(() => {
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const monthlyRewards = new Array(12).fill(0);
 
     // Filter responses with reward_status === "paid" and calculate by month
@@ -30,7 +29,7 @@ export default function MonthlySalesChart() {
             const date = new Date(dateStr);
             const month = date.getMonth(); // 0-11
             monthlyRewards[month] += response.reward_amount || 0;
-          } catch (err) {
+          } catch {
             console.warn("Invalid date in response:", dateStr);
           }
         }

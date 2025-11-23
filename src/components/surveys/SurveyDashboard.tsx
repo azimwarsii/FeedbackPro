@@ -4,11 +4,9 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Plus, 
   Download, 
-  RefreshCw, 
   MoreHorizontal, 
   Edit, 
   BarChart3, 
-  Copy, 
   Trash2, 
   Play,
   Pause,
@@ -114,7 +112,7 @@ export default function Surveys() {
   const surveys = useSurveysStore((state) => state.surveys);
   const removeSurvey = useSurveysStore((state) => state.removeSurvey);
   const { data: session } = useSession();
-  const userId = (session as any)?.user?.id;
+  const userId = (session?.user as { id?: string })?.id;
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -221,8 +219,8 @@ export default function Surveys() {
         type,
         createdDate,
         description: survey.description || "No description provided.",
-        targetAudience: (survey as any).targetAudience || "All Users",
-        completionRate: Number((survey as any).completionRate ?? 0),
+        targetAudience: (survey as { targetAudience?: string }).targetAudience || "All Users",
+        completionRate: Number((survey as { completionRate?: number }).completionRate ?? 0),
         originalId: survey._id || survey.id,
       };
     });
@@ -538,7 +536,7 @@ export default function Surveys() {
             {/* Action Buttons */}
             <div className="flex gap-2">
               <button 
-                onClick={() => window.location.href = `/create/${(survey as any).originalId || survey.id}`}
+                onClick={() => window.location.href = `/create/${(survey as { originalId?: string }).originalId || survey.id}`}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 <Edit className="w-4 h-4" />

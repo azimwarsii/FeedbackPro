@@ -8,6 +8,7 @@ import Label from "../form/Label";
 import { useSession } from "next-auth/react";
 import { useUserStore } from "@/store/useUserStore";
 import { useEffect } from "react";
+import { SessionUser } from "@/types/session";
 
 export default function ProfileInformationCard() {
   const { isOpen, openModal, closeModal } = useModal();
@@ -28,7 +29,7 @@ export default function ProfileInformationCard() {
   const handleSave = async () => {
     console.log(session?.user)
     try {
-      const userId = (session as any)?.user?.id;
+      const userId = (session?.user as SessionUser)?.id;
       if (!userId) {
         console.error("No user id found in session");
         return;

@@ -1,23 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { 
   Loader2, 
-  Mail, 
   Shield, 
   CheckCircle, 
   XCircle, 
   AlertCircle,
   Star,
-  Calendar,
-  Phone,
-  Hash,
-  Type,
   FileText,
-  CheckSquare,
-  Circle,
   Gift
 } from "lucide-react";
 import Button from "@/components/ui/button/Button";
@@ -87,7 +80,7 @@ export default function FeedbackPage() {
   const [showSurvey, setShowSurvey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alreadyFilled, setAlreadyFilled] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, string | number | string[] | null>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
@@ -235,6 +228,135 @@ export default function FeedbackPage() {
     }
   }, [honeypot]);
 
+  // Get visible questions sorted by order
+  const getVisibleQuestions = useCallback(() => {
+    if (!survey) return [];
+    return survey.questions
+      .filter(q => !hiddenQuestions.has(q.id))
+      .sort((a, b) => a.order - b.order);
+  }, [survey, hiddenQuestions]);
+
+  // Evaluate logic for a question
+  // Logic checks the current question's answer and applies action to targetQuestion
+  const evaluateLogic = (logic: QuestionLogic, currentQuestionId: string, formData: Record<string, string | number | string[] | null>): boolean => {
+    const sourceAnswer = formData[currentQuestionId];
+    
+    // If no answer, condition is not met
+    if (sourceAnswer === undefined || sourceAnswer === null || sourceAnswer === "") {
+      return false;
+    }
+
+    // Convert answer to string for comparison
+    // For arrays (multiple choice), join with comma
+    const sourceStr = Array.isArray(sourceAnswer) 
+      ? sourceAnswer.join(",") 
+      : String(sourceAnswer);
+    const compareStr = String(logic.value);
+
+    switch (logic.condition) {
+      case "equals":
+        return sourceStr === compareStr;
+      case "not_equals":
+        return sourceStr !== compareStr;
+      case "contains":
+        return sourceStr.toLowerCase().includes(compareStr.toLowerCase());
+      case "not_contains":
+        return !sourceStr.toLowerCase().includes(compareStr.toLowerCase());
+      case "less_than":
+        // For numeric comparison, try to parse as numbers
+        const sourceNum = parseFloat(sourceStr);
+        const compareNum = parseFloat(compareStr);
+        if (!isNaN(sourceNum) && !isNaN(compareNum)) {
+          return sourceNum < compareNum;
+        }
+        // Fallback to string comparison
+        return sourceStr < compareStr;
+      case "greater_than":
+        // For numeric comparison, try to parse as numbers
+        const sourceNum2 = parseFloat(sourceStr);
+        const compareNum2 = parseFloat(compareStr);
+        if (!isNaN(sourceNum2) && !isNaN(compareNum2)) {
+          return sourceNum2 > compareNum2;
+        }
+        // Fallback to string comparison
+        return sourceStr > compareStr;
+      default:
+        return false;
+    }
+  };
+
+  // Apply logic rules and update hidden questions
+  const applyQuestionLogic = useCallback((updatedFormData: Record<string, string | number | string[] | null>) => {
+    if (!survey) return;
+
+    const newHiddenQuestions = new Set<string>();
+
+    // Process each question's logic rules
+    // We need to evaluate ALL logic rules from ALL questions to determine what should be hidden
+    survey.questions.forEach((question) => {
+      if (!question.logic || question.logic.length === 0) return;
+
+      question.logic.forEach((rule) => {
+        // Skip if targetQuestion is empty
+        if (!rule.targetQuestion || rule.targetQuestion.trim() === "") return;
+
+        // Evaluate logic based on the question that has the logic rule
+        const conditionMet = evaluateLogic(rule, question.id, updatedFormData);
+
+        if (conditionMet) {
+          if (rule.action === "hide") {
+            // Hide the target question
+            newHiddenQuestions.add(rule.targetQuestion);
+          } else if (rule.action === "show") {
+            // Show the target question (remove from hidden set)
+            // Don't add it, it will remain visible
+          }
+          // jump_to is handled in handleNext, doesn't affect hidden state
+        } else {
+          // If condition not met, reverse the action
+          if (rule.action === "hide") {
+            // If hide condition not met, show the target question (don't add to hidden)
+            // Don't add it, it will remain visible
+          } else if (rule.action === "show") {
+            // If show condition not met, hide the target question
+            newHiddenQuestions.add(rule.targetQuestion);
+          }
+        }
+      });
+    });
+
+    // Get current question using current hiddenQuestions state (before update)
+    const currentVisibleQuestions = survey.questions
+      .filter(q => !hiddenQuestions.has(q.id))
+      .sort((a, b) => a.order - b.order);
+    const currentQuestion = currentVisibleQuestions[currentStep];
+    const currentQuestionId = currentQuestion?.id;
+
+    // Update hidden questions state
+    setHiddenQuestions(newHiddenQuestions);
+    
+    // Adjust current step if current question becomes hidden
+    const visibleQuestions = survey.questions
+      .filter(q => !newHiddenQuestions.has(q.id))
+      .sort((a, b) => a.order - b.order);
+    
+    if (visibleQuestions.length > 0) {
+      if (!currentQuestionId || newHiddenQuestions.has(currentQuestionId)) {
+        // Current question is now hidden, go to first visible question
+        setCurrentStep(0);
+      } else {
+        // Update step index to match new visible questions order
+        const newIndex = visibleQuestions.findIndex(q => q.id === currentQuestionId);
+        if (newIndex !== -1 && newIndex !== currentStep) {
+          setCurrentStep(newIndex);
+        } else if (currentStep >= visibleQuestions.length) {
+          // Step is beyond visible questions, go to last question
+          setCurrentStep(Math.max(0, visibleQuestions.length - 1));
+        }
+      }
+    }
+  }, [survey, hiddenQuestions, currentStep]);
+
   // Adjust step when hidden questions change
   useEffect(() => {
     if (!survey) return;
@@ -258,7 +380,7 @@ export default function FeedbackPage() {
     if (!currentQuestion && currentStep !== 0) {
       setCurrentStep(0);
     }
-  }, [hiddenQuestions, survey]);
+  }, [hiddenQuestions, survey, currentStep, getVisibleQuestions]);
 
   // Show survey once all checks pass
   useEffect(() => {
@@ -436,134 +558,13 @@ export default function FeedbackPage() {
         }
       };
     }
-  }, [emailVerified, botDetected, survey, status]);
+  }, [emailVerified, botDetected, survey, status, applyQuestionLogic, formData]);
 
   const handleSignIn = () => {
     signIn("google", { callbackUrl: window.location.href });
   };
 
-  // Evaluate logic for a question
-  // Logic checks the current question's answer and applies action to targetQuestion
-  const evaluateLogic = (logic: QuestionLogic, currentQuestionId: string, formData: Record<string, any>): boolean => {
-    const sourceAnswer = formData[currentQuestionId];
-    
-    // If no answer, condition is not met
-    if (sourceAnswer === undefined || sourceAnswer === null || sourceAnswer === "") {
-      return false;
-    }
-
-    // Convert answer to string for comparison
-    // For arrays (multiple choice), join with comma
-    const sourceStr = Array.isArray(sourceAnswer) 
-      ? sourceAnswer.join(",") 
-      : String(sourceAnswer);
-    const compareStr = String(logic.value);
-
-    switch (logic.condition) {
-      case "equals":
-        return sourceStr === compareStr;
-      case "not_equals":
-        return sourceStr !== compareStr;
-      case "contains":
-        return sourceStr.toLowerCase().includes(compareStr.toLowerCase());
-      case "not_contains":
-        return !sourceStr.toLowerCase().includes(compareStr.toLowerCase());
-      case "less_than":
-        // For numeric comparison, try to parse as numbers
-        const sourceNum = parseFloat(sourceStr);
-        const compareNum = parseFloat(compareStr);
-        if (!isNaN(sourceNum) && !isNaN(compareNum)) {
-          return sourceNum < compareNum;
-        }
-        // Fallback to string comparison
-        return sourceStr < compareStr;
-      case "greater_than":
-        // For numeric comparison, try to parse as numbers
-        const sourceNum2 = parseFloat(sourceStr);
-        const compareNum2 = parseFloat(compareStr);
-        if (!isNaN(sourceNum2) && !isNaN(compareNum2)) {
-          return sourceNum2 > compareNum2;
-        }
-        // Fallback to string comparison
-        return sourceStr > compareStr;
-      default:
-        return false;
-    }
-  };
-
-  // Apply logic rules and update hidden questions
-  const applyQuestionLogic = (updatedFormData: Record<string, any>) => {
-    if (!survey) return;
-
-    const newHiddenQuestions = new Set<string>();
-
-    // Process each question's logic rules
-    // We need to evaluate ALL logic rules from ALL questions to determine what should be hidden
-    survey.questions.forEach((question) => {
-      if (!question.logic || question.logic.length === 0) return;
-
-      question.logic.forEach((rule) => {
-        // Skip if targetQuestion is empty
-        if (!rule.targetQuestion || rule.targetQuestion.trim() === "") return;
-
-        // Evaluate logic based on the question that has the logic rule
-        const conditionMet = evaluateLogic(rule, question.id, updatedFormData);
-
-        if (conditionMet) {
-          if (rule.action === "hide") {
-            // Hide the target question
-            newHiddenQuestions.add(rule.targetQuestion);
-          } else if (rule.action === "show") {
-            // Show the target question (remove from hidden set)
-            // Don't add it, it will remain visible
-          }
-          // jump_to is handled in handleNext, doesn't affect hidden state
-        } else {
-          // If condition not met, reverse the action
-          if (rule.action === "hide") {
-            // If hide condition not met, show the target question (don't add to hidden)
-            // Don't add it, it will remain visible
-          } else if (rule.action === "show") {
-            // If show condition not met, hide the target question
-            newHiddenQuestions.add(rule.targetQuestion);
-          }
-        }
-      });
-    });
-
-    // Get current question using current hiddenQuestions state (before update)
-    const currentVisibleQuestions = survey.questions
-      .filter(q => !hiddenQuestions.has(q.id))
-      .sort((a, b) => a.order - b.order);
-    const currentQuestion = currentVisibleQuestions[currentStep];
-    const currentQuestionId = currentQuestion?.id;
-
-    // Update hidden questions state
-    setHiddenQuestions(newHiddenQuestions);
-    
-    // Adjust current step if current question becomes hidden
-    const visibleQuestions = survey.questions
-      .filter(q => !newHiddenQuestions.has(q.id))
-      .sort((a, b) => a.order - b.order);
-    
-    if (visibleQuestions.length > 0) {
-      if (!currentQuestionId || newHiddenQuestions.has(currentQuestionId)) {
-        // Current question is now hidden, go to first visible question
-        setCurrentStep(0);
-      } else {
-        // Update step index to match new visible questions order
-        const newIndex = visibleQuestions.findIndex(q => q.id === currentQuestionId);
-        if (newIndex !== -1 && newIndex !== currentStep) {
-          setCurrentStep(newIndex);
-        } else if (currentStep >= visibleQuestions.length) {
-          // Step is beyond visible questions, go to last question
-          setCurrentStep(Math.max(0, visibleQuestions.length - 1));
-        }
-      }
-    }
-  };
-
-  const handleInputChange = (questionId: string, value: any) => {
+  const handleInputChange = (questionId: string, value: string | number | string[] | null) => {
     // Update form data immediately
     const updatedFormData = {
       ...formData,
@@ -624,14 +625,6 @@ export default function FeedbackPage() {
         }
       }, 150);
     }
-  };
-
-  // Get visible questions sorted by order
-  const getVisibleQuestions = () => {
-    if (!survey) return [];
-    return survey.questions
-      .filter(q => !hiddenQuestions.has(q.id))
-      .sort((a, b) => a.order - b.order);
   };
 
   // Get current question
@@ -730,8 +723,10 @@ export default function FeedbackPage() {
     // Validate required fields (only for visible questions)
     const visibleQuestions = getVisibleQuestions();
     const requiredQuestions = visibleQuestions.filter(q => q.required);
-    const missingFields = requiredQuestions.filter(q => !formData[q.id] || 
-      (Array.isArray(formData[q.id]) && formData[q.id].length === 0));
+    const missingFields = requiredQuestions.filter(q => {
+      const value = formData[q.id];
+      return !value || (Array.isArray(value) && value.length === 0);
+    });
     
     if (missingFields.length > 0) {
       setError(`Please fill in all required fields: ${missingFields.map(q => q.title).join(", ")}`);
@@ -759,7 +754,6 @@ export default function FeedbackPage() {
       // Calculate comprehensive bot score based on multiple factors
       const calculateBotScore = () => {
         let score = 1.0; // Start with perfect human score
-        let factors = 0;
 
         // Factor 1: Honeypot field (if filled, definitely a bot)
         if (honeypot !== "") {
@@ -771,47 +765,38 @@ export default function FeedbackPage() {
         const minExpectedTime = 10; // Minimum 10 seconds for a real user
         if (timeOnPage < minExpectedTime) {
           score -= 0.3;
-          factors++;
         } else if (timeOnPage < minExpectedTime * 2) {
           score -= 0.1;
-          factors++;
         }
 
         // Factor 3: Mouse movements (humans move mouse, bots often don't)
         const mouseMovements = botMetrics.mouseMovements;
         if (mouseMovements < 5) {
           score -= 0.2;
-          factors++;
         } else if (mouseMovements < 10) {
           score -= 0.1;
-          factors++;
         }
 
         // Factor 4: Keystrokes (too few or too many = suspicious)
         const keystrokes = botMetrics.keystrokes;
         if (keystrokes === 0) {
           score -= 0.2;
-          factors++;
         } else if (keystrokes > 1000) { // Unusually high
           score -= 0.1;
-          factors++;
         }
 
         // Factor 5: Typing speed (too consistent = bot-like)
         const avgTypingSpeed = botMetrics.averageTypingSpeed;
         if (avgTypingSpeed > 0 && avgTypingSpeed < 30) { // Less than 30ms between keys (too fast)
           score -= 0.15;
-          factors++;
         } else if (avgTypingSpeed > 0 && avgTypingSpeed > 2000) { // More than 2 seconds (too slow/mechanical)
           score -= 0.1;
-          factors++;
         }
 
         // Factor 6: Scroll events (humans scroll, bots might not)
         const scrollEvents = botMetrics.scrollEvents;
         if (scrollEvents === 0 && timeOnPage > 5) {
           score -= 0.1;
-          factors++;
         }
 
         // Factor 7: Focus/blur events (humans interact with page)
@@ -819,14 +804,12 @@ export default function FeedbackPage() {
         const blurEvents = botMetrics.blurEvents;
         if (focusEvents === 0 && blurEvents === 0 && timeOnPage > 5) {
           score -= 0.1;
-          factors++;
         }
 
         // Factor 8: Suspicious patterns detected
         const suspiciousPatterns = botMetrics.suspiciousPatterns;
         if (suspiciousPatterns > 0) {
           score -= suspiciousPatterns * 0.15;
-          factors++;
         }
 
         // Factor 9: Mouse movement patterns (linear/robotic movement)
@@ -846,7 +829,6 @@ export default function FeedbackPage() {
           const linearRatio = linearMovements / mousePositions.length;
           if (linearRatio > 0.5) {
             score -= 0.2;
-            factors++;
           }
         }
 
@@ -1001,7 +983,18 @@ export default function FeedbackPage() {
           });
 
           // Prepare campaign update payload
-          const campaignUpdatePayload: any = {
+          const campaignUpdatePayload: {
+            contacts: Array<{ name: string; email: string; phone: string; filled?: boolean }>;
+            responses: number;
+            reward?: {
+              type: "cash reward" | "promo code";
+              amount?: number;
+              amount_utilized?: number;
+              code?: string;
+              description?: string;
+              codes_utilized?: number;
+            };
+          } = {
             contacts: updatedContacts,
             responses: (campaign.responses || 0) + 1,
           };
@@ -1141,33 +1134,38 @@ export default function FeedbackPage() {
       case "multiple-choice":
         return (
           <div className="space-y-3">
-            {question.options?.map((option, index) => (
-              <label 
-                key={index} 
-                className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all duration-200 ${
-                  (formData[question.id] || []).includes(option)
-                    ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400"
-                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={(formData[question.id] || []).includes(option)}
-                  onChange={(e) => {
-                    const current = formData[question.id] || [];
-                    if (e.target.checked) {
-                      handleInputChange(question.id, [...current, option]);
-                    } else {
-                      handleInputChange(question.id, current.filter((v: string) => v !== option));
-                    }
-                  }}
-                  className="w-5 h-5 text-brand-600 border-gray-300 rounded focus:ring-2 focus:ring-brand-500 focus:ring-offset-0 dark:border-gray-600 dark:bg-gray-700"
-                />
-                <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100 font-medium flex-1">
-                  {option}
-                </span>
-              </label>
-            ))}
+            {question.options?.map((option, index) => {
+              const currentValue = formData[question.id];
+              const currentArray = Array.isArray(currentValue) ? currentValue : [];
+              const isChecked = currentArray.includes(option);
+              
+              return (
+                <label 
+                  key={index} 
+                  className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all duration-200 ${
+                    isChecked
+                      ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400"
+                      : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        handleInputChange(question.id, [...currentArray, option]);
+                      } else {
+                        handleInputChange(question.id, currentArray.filter((v: string) => v !== option));
+                      }
+                    }}
+                    className="w-5 h-5 text-brand-600 border-gray-300 rounded focus:ring-2 focus:ring-brand-500 focus:ring-offset-0 dark:border-gray-600 dark:bg-gray-700"
+                  />
+                  <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100 font-medium flex-1">
+                    {option}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         );
       
@@ -1203,20 +1201,26 @@ export default function FeedbackPage() {
       case "rating-scale":
         return (
           <div className="flex flex-wrap gap-3 sm:gap-4 justify-center sm:justify-start py-2">
-            {Array.from({ length: question.ratingMax || 5 }, (_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => handleInputChange(question.id, i + 1)}
-                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl transition-all duration-200 flex items-center justify-center ${
-                  formData[question.id] >= i + 1
-                    ? "text-yellow-400 bg-yellow-50 dark:bg-yellow-400/10 scale-110 shadow-lg"
-                    : "text-gray-300 dark:text-gray-600 hover:text-yellow-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:scale-105"
-                }`}
-              >
-                <Star className="w-full h-full fill-current" />
-              </button>
-            ))}
+            {Array.from({ length: question.ratingMax || 5 }, (_, i) => {
+              const ratingValue = formData[question.id];
+              const numericValue = typeof ratingValue === 'number' ? ratingValue : 0;
+              const isSelected = numericValue >= i + 1;
+              
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleInputChange(question.id, i + 1)}
+                  className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl transition-all duration-200 flex items-center justify-center ${
+                    isSelected
+                      ? "text-yellow-400 bg-yellow-50 dark:bg-yellow-400/10 scale-110 shadow-lg"
+                      : "text-gray-300 dark:text-gray-600 hover:text-yellow-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:scale-105"
+                  }`}
+                >
+                  <Star className="w-full h-full fill-current" />
+                </button>
+              );
+            })}
           </div>
         );
       
@@ -1448,7 +1452,7 @@ export default function FeedbackPage() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">2</span>
-                  <span>Your email will be <strong>automatically verified</strong> to ensure you're authorized to participate</span>
+                  <span>Your email will be <strong>automatically verified</strong> to ensure you&apos;re authorized to participate</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">3</span>
@@ -1660,7 +1664,7 @@ export default function FeedbackPage() {
                     type="button"
                     onClick={(e: React.MouseEvent) => {
                       e.preventDefault();
-                      handleSubmit(e as any);
+                      handleSubmit(e as unknown as React.FormEvent);
                     }}
                     disabled={!canProceed() || submitting}
                     className="w-full sm:w-auto sm:min-w-[140px] inline-flex items-center justify-center font-medium gap-2 rounded-lg transition px-5 py-3.5 text-sm bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600 disabled:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-50"

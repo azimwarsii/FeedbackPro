@@ -1,6 +1,19 @@
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
+// Extend NextAuth types
+declare module "next-auth" {
+  interface User {
+    mongoId?: string;
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    userId?: string;
+  }
+}
+
 const handler = NextAuth({
   providers: [
     GoogleProvider({
@@ -33,14 +46,18 @@ const handler = NextAuth({
           }),
         });
         if (res.ok) {
-          const data = await res.json().catch(() => null);
+          const data = await res.json().catch(() => null) as {
+            user?: { _id?: string; id?: string };
+            _id?: string;
+            id?: string;
+          } | null;
           const idFromDb =
             data?.user?._id || data?.user?.id || data?._id || data?.id || null;
           if (idFromDb) {
-            (user as any).mongoId = idFromDb;
+            user.mongoId = idFromDb;
           }
         }
-      } catch (_) {
+      } catch {
         // do not block sign-in on backend failure; jwt will attempt again
       }
       return true;
@@ -56,12 +73,12 @@ const handler = NextAuth({
       }
 
       // If signIn callback provided a mongo id, use it
-      if (user && (user as any).mongoId) {
-        (token as any).userId = (user as any).mongoId;
+      if (user && user.mongoId) {
+        token.userId = user.mongoId;
       }
 
       // If we don't yet have a Mongo user id, resolve it from the backend
-      if (!(token as any).userId && token.email && token.name) {
+      if (!token.userId && token.email && token.name) {
         const baseUrl = process.env.BACKEND_URL;
         if (baseUrl) {
           try {
@@ -75,11 +92,15 @@ const handler = NextAuth({
               }),
             });
             if (res.ok) {
-              const data = await res.json().catch(() => null);
+              const data = await res.json().catch(() => null) as {
+                user?: { _id?: string; id?: string };
+                _id?: string;
+                id?: string;
+              } | null;
               const idFromDb =
                 data?.user?._id || data?.user?.id || data?._id || data?.id || null;
               if (idFromDb) {
-                (token as any).userId = idFromDb as any;
+                token.userId = idFromDb;
               }
             }
           } catch (e) {
@@ -89,7 +110,7 @@ const handler = NextAuth({
       }
 
       // Fallback: try fetching by email if still missing
-      if (!(token as any).userId && token.email) {
+      if (!token.userId && token.email) {
         const baseUrl =
           process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "";
         if (baseUrl) {
@@ -100,11 +121,15 @@ const handler = NextAuth({
               )}`
             );
             if (res.ok) {
-              const data = await res.json().catch(() => null);
+              const data = await res.json().catch(() => null) as {
+                user?: { _id?: string; id?: string };
+                _id?: string;
+                id?: string;
+              } | null;
               const idFromDb =
                 data?.user?._id || data?.user?.id || data?._id || data?.id || null;
               if (idFromDb) {
-                (token as any).userId = idFromDb as any;
+                token.userId = idFromDb;
               }
             }
           } catch (e) {
@@ -121,10 +146,10 @@ const handler = NextAuth({
      */
     async session({ session, token }) {
       session.user = {
-        id: (token as any).userId,
+        id: token.userId || "",
         email: token.email as string | undefined,
         name: token.name as string | undefined,
-      } as any;
+      };
       return session;
     },
 

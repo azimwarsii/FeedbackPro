@@ -3,9 +3,7 @@
 import React, { useState } from "react";
 import { 
   Download, 
-  Mail, 
   Search, 
-  Filter, 
   Phone, 
   Mail as MailIcon, 
   MoreVertical,
@@ -19,19 +17,18 @@ import {
   Award,
   ChevronDown,
   Plus,
-  RefreshCw,
   Upload,
   File,
   X,
   CheckCircle,
   AlertCircle
 } from "lucide-react";
-import Badge from "../ui/badge/Badge";
 import Button from "../ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 import Label from "@/components/form/Label";
 import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
+import { SessionUser } from "@/types/session";
 import { useCustomerStore, Customer as StoreCustomer } from "@/store/useCustomerStore";
 import { useResponseStore } from "@/store/useResponseStore";
 
@@ -219,14 +216,14 @@ export default function Customers() {
         const workbook = XLSX.read(arrayBuffer, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | boolean | null)[][];
         
         if (jsonData.length === 0) {
           alert("Excel file is empty");
           return;
         }
         
-        const headers = (jsonData[0] as any[]).map((h: any) => String(h || '').trim().toLowerCase());
+        const headers = (jsonData[0] as (string | number | boolean | null)[]).map((h) => String(h || '').trim().toLowerCase());
         const nameIndex = headers.findIndex(h => h === 'name');
         const phoneIndex = headers.findIndex(h => h === 'phone');
         const emailIndex = headers.findIndex(h => h === 'email');
@@ -246,7 +243,7 @@ export default function Customers() {
         const fileEmails = new Map<string, number>();
         const filePhones = new Map<string, number>();
         
-        const contacts = jsonData.slice(1).map((row: any[], index: number) => {
+        const contacts = jsonData.slice(1).map((row: (string | number | boolean | null)[], index: number) => {
           const name = String(row[nameIndex] || '').trim();
           const phone = String(row[phoneIndex] || '').trim();
           const email = String(row[emailIndex] || '').trim();
@@ -343,8 +340,8 @@ export default function Customers() {
       return;
     }
 
-    const safeUser = session?.user as any;
-    const userId = safeUser?.id as string | undefined;
+    const safeUser = session?.user as SessionUser;
+    const userId = safeUser?.id;
 
     if (!userId) {
       alert("You must be logged in to add customers.");
@@ -430,8 +427,8 @@ export default function Customers() {
   const handleEditCustomer = async () => {
     if (!editingCustomer) return;
 
-    const safeUser = session?.user as any;
-    const userId = safeUser?.id as string | undefined;
+    const safeUser = session?.user as SessionUser;
+    const userId = safeUser?.id;
 
     if (!userId) {
       alert("You must be logged in to edit customers.");
@@ -496,8 +493,8 @@ export default function Customers() {
       return;
     }
 
-    const safeUser = session?.user as any;
-    const userId = safeUser?.id as string | undefined;
+    const safeUser = session?.user as SessionUser;
+    const userId = safeUser?.id;
 
     if (!userId) {
       alert("You must be logged in to delete customers.");

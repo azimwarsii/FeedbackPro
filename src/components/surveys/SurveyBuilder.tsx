@@ -28,26 +28,15 @@ import {
   ChevronRight
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import type { QuestionType, Question as BaseQuestion, LogicRule as BaseLogicRule } from "@/types/survey";
 
-type QuestionType = "short-text" | "long-text" | "multiple-choice" | "single-choice" | "rating-scale" | "date" | "email" | "phone" | "number";
-
-interface LogicRule {
+// Extended LogicRule with id for component use
+interface LogicRule extends BaseLogicRule {
   id: string;
-  condition: string;
-  value: string;
-  action: string;
-  targetQuestion?: string;
 }
 
-interface Question {
-  id: string;
-  type: QuestionType;
-  title: string;
-  description: string;
-  required: boolean;
-  options?: string[];
-  ratingMax?: number;
-  order: number;
+// Extended Question with LogicRule that has id
+interface Question extends Omit<BaseQuestion, 'logic'> {
   logic?: LogicRule[];
 }
 
@@ -82,7 +71,7 @@ export default function CreateSurvey({ surveyId }: { surveyId?: string }) {
   const [currentPreviewQuestion, setCurrentPreviewQuestion] = useState(0);
   const [isLoading, setIsLoading] = useState(!!surveyId);
   const { data: session } = useSession();
-  const userId = (session as any)?.user?.id;
+  const userId = (session?.user as { id?: string })?.id;
   const { addSurvey, updateSurvey, setSurveys, surveys } = useSurveysStore();
 
   const [survey, setSurvey] = useState<Survey>(
@@ -92,7 +81,7 @@ export default function CreateSurvey({ surveyId }: { surveyId?: string }) {
           questions: [],
           thankYouMessage: "Thank you for your feedback!",
           goal: "Goal",
-          user: userId
+          user: userId || ""
       } : template === "product-feedback" ? {
         "title": "Untitled Survey",
         "description": "Survey description",
@@ -188,21 +177,21 @@ export default function CreateSurvey({ surveyId }: { surveyId?: string }) {
         questions: [],
         thankYouMessage: "Thank you for your feedback!",
         goal: "Goal",
-        user: userId
+        user: userId || ""
       } : template === "market-research" ? {
         title: "Untitled Survey",
         description: "Survey description",
         questions: [],
         thankYouMessage: "Thank you for your feedback!",
         goal: "Goal",
-        user: userId
+        user: userId || ""
       } : {
         title: "Untitled Survey",
         description: "Survey description",
         questions: [],
         thankYouMessage: "Thank you for your feedback!",
         goal: "Goal",
-        user: userId
+        user: userId || ""
       }
   );
 
@@ -220,10 +209,19 @@ export default function CreateSurvey({ surveyId }: { surveyId?: string }) {
       );
 
       if (foundSurvey) {
+        // Convert questions to ensure logic rules have ids
+        const questionsWithLogicIds: Question[] = (foundSurvey.questions || []).map(q => ({
+          ...q,
+          logic: q.logic?.map((rule, index) => ({
+            ...rule,
+            id: (rule as LogicRule).id || `rule-${q.id}-${index}-${Date.now()}`,
+          })) || undefined,
+        }));
+        
         setSurvey({
           title: foundSurvey.title || "Untitled Survey",
           description: foundSurvey.description || "",
-          questions: foundSurvey.questions || [],
+          questions: questionsWithLogicIds,
           thankYouMessage: foundSurvey.thankYouMessage || "Thank you for your feedback!",
           goal: foundSurvey.goal || "",
           user: foundSurvey.user || userId || "",

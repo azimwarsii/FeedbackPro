@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Sparkles, FileText, Wallet, BarChart3, Download, RefreshCw } from "lucide-react";
+import { Sparkles, FileText, Wallet, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
 export default function QuickActions() {

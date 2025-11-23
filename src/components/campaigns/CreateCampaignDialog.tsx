@@ -5,43 +5,13 @@ import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import InputField from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import { Plus, Copy, Trash2, DollarSign, Users, FileText, MessageSquare, Mail, ArrowUp, ArrowDown, User, Search, File, CheckCircle, Gift, Upload, Sparkles, Filter, X, Eye, EyeOff, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { Plus, DollarSign, Users, FileText, MessageSquare, Mail, User, Search, File, CheckCircle, Gift, Upload, Sparkles, X, AlertCircle } from "lucide-react";
 import { useSurveysStore } from "@/store/useSurveysStore";
 import { useCampaignStore } from "@/store/useCampaignStore";
 import { useCustomerStore } from "@/store/useCustomerStore";
 import { useSession } from "next-auth/react";
+import { SessionUser } from "@/types/session";
 import * as XLSX from "xlsx";
-
-interface LogicRule {
-  id: string;
-  condition: "equals" | "not_equals" | "contains" | "greater_than" | "less_than";
-  value: string;
-  action: "show" | "hide" | "skip_to";
-  targetQuestionId?: string;
-}
-
-interface SurveyQuestion {
-  id: string;
-  type: "text" | "multiple-choice" | "rating" | "yes-no";
-  title: string;
-  description: string;
-  required: boolean;
-  options?: string[];
-  logicRules: LogicRule[];
-}
-
-interface Survey {
-  id: string;
-  title: string;
-  description: string;
-  questions: SurveyQuestion[];
-  settings: {
-    allowAnonymous: boolean;
-    showProgressBar: boolean;
-    randomizeQuestions: boolean;
-    thankYouMessage: string;
-  };
-}
 
 interface CustomerDisplay {
   id: string;
@@ -57,7 +27,7 @@ export function CreateCampaignDialog() {
   const addCampaign = useCampaignStore((state) => state.addCampaign);
   const storeCustomers = useCustomerStore((state) => state.customers);
   const { data: session } = useSession();
-  const userId = (session as any)?.user?.id;
+  const userId = (session?.user as SessionUser)?.id;
   const [campaignData, setCampaignData] = useState({
     name: "",
     description: "",
@@ -213,14 +183,14 @@ export function CreateCampaignDialog() {
         const workbook = XLSX.read(arrayBuffer, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | boolean | null)[][];
         
         if (jsonData.length === 0) {
           alert("Excel file is empty");
           return;
         }
         
-        const headers = (jsonData[0] as any[]).map((h: any) => String(h || '').trim().toLowerCase());
+        const headers = (jsonData[0] as (string | number | boolean | null)[]).map((h) => String(h || '').trim().toLowerCase());
         const nameIndex = headers.findIndex(h => h === 'name');
         const phoneIndex = headers.findIndex(h => h === 'phone');
         const emailIndex = headers.findIndex(h => h === 'email');
@@ -239,7 +209,7 @@ export function CreateCampaignDialog() {
         const fileEmails = new Map<string, number>();
         const filePhones = new Map<string, number>();
         
-        const contacts = jsonData.slice(1).map((row: any[], index: number) => {
+        const contacts = jsonData.slice(1).map((row: (string | number | boolean | null)[], index: number) => {
           const name = String(row[nameIndex] || '').trim();
           const phone = String(row[phoneIndex] || '').trim();
           const email = String(row[emailIndex] || '').trim();
@@ -372,7 +342,12 @@ export function CreateCampaignDialog() {
       }
 
       // Prepare reward object
-      let reward: any = undefined;
+      let reward: {
+        type: "cash reward" | "promo code";
+        amount?: number;
+        code?: string;
+        description?: string;
+      } | undefined = undefined;
       if (campaignData.rewardType) {
         if (campaignData.rewardType === "cash") {
           const amount = parseFloat(campaignData.rewardValue);
@@ -744,7 +719,7 @@ export function CreateCampaignDialog() {
                       Create New Survey
                     </button>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                      You'll be redirected to create a new survey. Come back here after creating it.
+                      You&apos;ll be redirected to create a new survey. Come back here after creating it.
                     </p>
                   </div>
                 </div>

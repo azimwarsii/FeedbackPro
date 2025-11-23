@@ -4,7 +4,8 @@ import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useCampaignStore } from "@/store/useCampaignStore";
-import { ArrowLeft, Users, DollarSign, Calendar, Tag, Mail, FileText, Gift, BarChart3, TrendingUp, Clock, CheckCircle, XCircle, Phone, Edit2, Save, X } from "lucide-react";
+import { SessionUser } from "@/types/session";
+import { ArrowLeft, Users, DollarSign, Tag, Mail, FileText, Gift, BarChart3, Clock, Phone, Edit2, Save, X } from "lucide-react";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 
@@ -32,7 +33,7 @@ export default function CampaignDetailsPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Campaign Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">The campaign you're looking for doesn't exist.</p>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">The campaign you&apos;re looking for doesn&apos;t exist.</p>
           <Button onClick={() => router.push("/campaign")}>
             Back to Campaigns
           </Button>
@@ -123,8 +124,8 @@ export default function CampaignDetailsPage() {
   };
 
   const handleSaveEdit = async (field: "name" | "description" | "message_template") => {
-    const safeUser = session?.user as any;
-    const userId = safeUser?.id as string | undefined;
+    const safeUser = session?.user as SessionUser;
+    const userId = safeUser?.id;
 
     if (!userId) {
       alert("You must be logged in to update a campaign.");
@@ -132,7 +133,7 @@ export default function CampaignDetailsPage() {
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
-    const updates: any = {};
+    const updates: Partial<{ name: string; description: string; message_template: string }> = {};
 
     if (field === "name") {
       if (!editFormData.name.trim()) {
@@ -159,9 +160,6 @@ export default function CampaignDetailsPage() {
       );
 
       if (response.ok) {
-        const data = await response.json();
-        const updatedCampaign = data?.campaign || data;
-        
         // Update campaign in store
         updateCampaign(campaignId, updates);
         
@@ -605,7 +603,7 @@ export default function CampaignDetailsPage() {
                 No contacts found
               </h3>
               <p className="text-gray-500 dark:text-gray-400">
-                This campaign doesn't have any contacts yet.
+                This campaign doesn&apos;t have any contacts yet.
               </p>
             </div>
           )}

@@ -168,10 +168,6 @@ export default function RecentCampaigns() {
     setOpenMenuId(openMenuId === campaignId ? null : campaignId);
   };
 
-  const handleMenuAction = (action: string, campaignId: string) => {
-    console.log(`${action} campaign ${campaignId}`);
-    setOpenMenuId(null);
-  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 pb-6 pt-6 dark:border-gray-700 dark:bg-gray-800">

@@ -5,7 +5,7 @@ import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
 import React from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import UserStoreInitializer from "@/context/UserStoreInitializer";
 import SurveyStoreInitializer from "@/context/SurveyStoreInitializer";
@@ -19,7 +19,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
