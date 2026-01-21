@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/modal";
-import { Download, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp } from "lucide-react";
 import type { Response as StoreResponse } from "@/store/useResponseStore";
 
 type RewardStatus = "pending" | "paid" | "declined";
@@ -116,6 +116,7 @@ export default function CustomerResponsesModal(props: {
     });
   }, [customerResponses, search]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const exportCsv = () => {
     const headers = [
       "createdAt",

@@ -1452,10 +1452,6 @@ export default function FeedbackPage() {
 
       // Get responder's email
       const responderEmail = session.user.email.toLowerCase().trim();
-      const responderContact = campaign.contacts?.find(
-        c => c.email.toLowerCase().trim() === responderEmail
-      );
-      const responderPhone = responderContact?.phone || "";
 
       // Get current campaign contacts
       const currentContacts = campaign.contacts || [];
@@ -1847,13 +1843,13 @@ export default function FeedbackPage() {
               <ol className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                 <li className="flex items-start gap-2">
                   <span className="text-amber-600 dark:text-amber-400 mt-1">1.</span>
-                  <span>Click the "Open Link" button or copy the survey link above to open the external survey in a new tab</span>
+                  <span>Click the &quot;Open Link&quot; button or copy the survey link above to open the external survey in a new tab</span>
                 </li>
                 {campaign.code && (
                   <>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-600 dark:text-amber-400 mt-1">2.</span>
-                      <span>Enter the 4-digit code provided to you in the field above and click "Verify"</span>
+                      <span>Enter the 4-digit code provided to you in the field above and click &quot;Verify&quot;</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-600 dark:text-amber-400 mt-1">3.</span>

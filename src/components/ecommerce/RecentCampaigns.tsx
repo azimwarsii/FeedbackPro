@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Badge from "../ui/badge/Badge";
-import { Users, DollarSign, Calendar, MoreHorizontal, Plus, Tag, Download } from "lucide-react";
+import { Users, DollarSign, Calendar, MoreHorizontal, Plus, Tag } from "lucide-react";
 import { useCampaignStore, Campaign as StoreCampaign } from "@/store/useCampaignStore";
 
 // Define the TypeScript interface for display campaign data

@@ -889,17 +889,18 @@ export function CreateCampaignDialog() {
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="external-survey-link">External Survey Link</Label>
-                        <InputField
+                        <input
                           id="external-survey-link"
                           type="url"
                           placeholder="https://example.com/survey"
                           value={campaignData.externalSurveyLink}
                           onChange={(e) => setCampaignData(prev => ({ ...prev, externalSurveyLink: e.target.value }))}
+                          className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                         />
                       </div>
                       <div>
                         <Label htmlFor="external-survey-code">4-Digit Code</Label>
-                        <InputField
+                        <input
                           id="external-survey-code"
                           type="text"
                           placeholder="1234"
@@ -911,6 +912,7 @@ export function CreateCampaignDialog() {
                               setCampaignData(prev => ({ ...prev, externalSurveyCode: value }));
                             }
                           }}
+                          className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                         />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           Enter a 4-digit code for this external survey

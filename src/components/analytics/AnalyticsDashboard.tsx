@@ -4,7 +4,6 @@ import React, { useState, useMemo } from "react";
 import { 
   TrendingUp, 
   TrendingDown, 
-  Download, 
   Calendar,
   Users,
   Award,

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CreateCampaignDialog } from "./CreateCampaignDialog";
-import { MoreHorizontal, BarChart3, Copy, Trash2, Users, DollarSign, Calendar, Download, Search, Filter, ChevronDown, Pause, Play, Tag } from "lucide-react";
+import { MoreHorizontal, BarChart3, Copy, Trash2, Users, DollarSign, Search, Filter, ChevronDown, Pause, Play, Tag } from "lucide-react";
 import { useCampaignStore, Campaign as StoreCampaign } from "@/store/useCampaignStore";
 import { useSession } from "next-auth/react";
 import { SessionUser } from "@/types/session";

@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { 
-  Download, 
   Search, 
   Phone, 
   Mail as MailIcon, 
