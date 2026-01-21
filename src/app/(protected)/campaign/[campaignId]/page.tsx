@@ -8,6 +8,7 @@ import { SessionUser } from "@/types/session";
 import { ArrowLeft, Users, DollarSign, Tag, Mail, FileText, Gift, BarChart3, Clock, Phone, Edit2, Save, X } from "lucide-react";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
+import CampaignResponsesModal from "@/components/campaigns/CampaignResponsesModal";
 
 export default function CampaignDetailsPage() {
   const params = useParams();
@@ -17,6 +18,7 @@ export default function CampaignDetailsPage() {
   const campaigns = useCampaignStore((state) => state.campaigns);
   const updateCampaign = useCampaignStore((state) => state.updateCampaign);
   const [showContactsModal, setShowContactsModal] = useState(false);
+  const [showResponsesModal, setShowResponsesModal] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingSMS, setIsEditingSMS] = useState(false);
@@ -181,6 +183,12 @@ export default function CampaignDetailsPage() {
 
   return (
     <div className="space-y-6">
+      <CampaignResponsesModal
+        isOpen={showResponsesModal}
+        onClose={() => setShowResponsesModal(false)}
+        campaignId={campaignId}
+        campaignName={campaign.name}
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -255,18 +263,24 @@ export default function CampaignDetailsPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <button
+          type="button"
+          onClick={() => setShowResponsesModal(true)}
+          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-left hover:shadow-md transition-all duration-200 hover:border-green-300 dark:hover:border-green-600"
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Responses</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">{responses}</p>
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">{responseRate}% response rate</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                {responseRate}% response rate · Click to view all
+              </p>
             </div>
             <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
               <BarChart3 className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
           </div>
-        </div>
+        </button>
 
         {isPromoCode ? (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">

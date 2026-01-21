@@ -30,7 +30,8 @@ import * as XLSX from "xlsx";
 import { useSession } from "next-auth/react";
 import { SessionUser } from "@/types/session";
 import { useCustomerStore, Customer as StoreCustomer } from "@/store/useCustomerStore";
-import { useResponseStore } from "@/store/useResponseStore";
+import { useResponseStore, Response as StoreResponse } from "@/store/useResponseStore";
+import CustomerResponsesModal from "@/components/customers/CustomerResponsesModal";
 
 interface Customer {
   id: string;
@@ -95,14 +96,34 @@ const getEngagementLevel = (surveys: number): "High" | "Medium" | "Low" => {
   return "Low";
 };
 
-// Transform store customer to component customer
-const transformCustomer = (storeCustomer: StoreCustomer): Customer => {
-  const surveys = storeCustomer.responses?.length || storeCustomer.invitations?.length || 0;
-  const rewards = storeCustomer.reward_received || 0;
-  const lastActivityDate = storeCustomer.responses?.[storeCustomer.responses.length - 1]?.createdAt || 
-                          storeCustomer.invitations?.[storeCustomer.invitations.length - 1]?.createdAt ||
-                          storeCustomer.updatedAt ||
-                          storeCustomer.createdAt;
+const normalizeEmail = (value?: string) => (value || "").trim().toLowerCase();
+const normalizePhone = (value?: string) => (value || "").replace(/\D/g, "");
+
+const getCustomerResponses = (storeCustomer: StoreCustomer, allResponses: StoreResponse[]) => {
+  const email = normalizeEmail(storeCustomer.email);
+  const phone = normalizePhone(storeCustomer.phone);
+
+  return allResponses.filter((r) => {
+    const respEmail = normalizeEmail(r.responders_email);
+    const respPhone = normalizePhone(r.responders_phone);
+    return (email && respEmail === email) || (phone && respPhone === phone);
+  });
+};
+
+const transformCustomer = (storeCustomer: StoreCustomer, allResponses: StoreResponse[]): Customer => {
+  const matchedResponses = getCustomerResponses(storeCustomer, allResponses);
+  const surveys = matchedResponses.length;
+  const rewards = matchedResponses.reduce(
+    (sum, r) => (r.reward_status === "paid" ? sum + (r.reward_amount || 0) : sum),
+    0
+  );
+
+  const lastActivityDate = matchedResponses
+    .map((r) => r.createdAt)
+    .filter(Boolean)
+    .sort((a, b) => (new Date(b || "").getTime() || 0) - (new Date(a || "").getTime() || 0))[0] ||
+    storeCustomer.updatedAt ||
+    storeCustomer.createdAt;
 
   return {
     id: storeCustomer._id || storeCustomer.id || "",
@@ -136,9 +157,11 @@ export default function Customers() {
   const [editFormData, setEditFormData] = useState({ name: "", email: "", phone: "" });
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedContacts, setParsedContacts] = useState<Array<{ name: string; phone: string; email: string; row: number; isValid: boolean; errors: string[] }>>([]);
+  const [isResponsesModalOpen, setIsResponsesModalOpen] = useState(false);
+  const [customerForResponses, setCustomerForResponses] = useState<Customer | null>(null);
 
-  // Transform store customers to component format
-  const customers = storeCustomers.map(transformCustomer);
+  // Transform store customers to component format using real responses
+  const customers = storeCustomers.map((c) => transformCustomer(c, responses));
 
   const filteredCustomers = customers.filter((customer) => {
     const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -535,6 +558,19 @@ export default function Customers() {
 
   return (
     <div className="space-y-6">
+      {customerForResponses && (
+        <CustomerResponsesModal
+          isOpen={isResponsesModalOpen}
+          onClose={() => {
+            setIsResponsesModalOpen(false);
+            setCustomerForResponses(null);
+          }}
+          customerName={customerForResponses.name}
+          customerEmail={customerForResponses.email}
+          customerPhone={customerForResponses.phone}
+          allResponses={responses}
+        />
+      )}
       {/* Enhanced Header Section */}
       {/* <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -568,11 +604,11 @@ export default function Customers() {
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+            {/* <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
               <span className="sm:hidden">Export</span>
-            </button>
+            </button> */}
           </div>
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -858,7 +894,8 @@ export default function Customers() {
                 onClick={() => {
                   const customer = customers.find(c => c.id === showActions);
                   if (customer) {
-                    // View Responses - placeholder for now
+                    setCustomerForResponses(customer);
+                    setIsResponsesModalOpen(true);
                   }
                   setShowActions(null);
                 }}

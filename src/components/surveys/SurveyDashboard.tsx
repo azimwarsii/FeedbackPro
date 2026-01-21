@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useSurveysStore } from "@/store/useSurveysStore";
 import { useSession } from "next-auth/react";
+import SurveyResponsesModal from "@/components/surveys/SurveyResponsesModal";
 
 type SurveyStatus = "Active" | "Paused" | "Completed" | "Draft";
 type SurveyType = "Product Feedback" | "Customer Satisfaction" | "Market Research" ;
@@ -118,6 +119,10 @@ export default function Surveys() {
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [typeFilter, setTypeFilter] = useState("All Types");
   const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [isResponsesModalOpen, setIsResponsesModalOpen] = useState(false);
+  const [selectedSurvey, setSelectedSurvey] = useState<{ id: string; title: string } | null>(
+    null
+  );
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -312,6 +317,15 @@ export default function Surveys() {
 
   return (
     <div className="space-y-6">
+      <SurveyResponsesModal
+        isOpen={isResponsesModalOpen}
+        onClose={() => {
+          setIsResponsesModalOpen(false);
+          setSelectedSurvey(null);
+        }}
+        surveyId={selectedSurvey?.id || null}
+        surveyTitle={selectedSurvey?.title}
+      />
       {/* Header Section */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -327,11 +341,11 @@ export default function Surveys() {
               <span className="hidden sm:inline">Refresh</span>
               <span className="sm:hidden">Refresh</span>
             </button> */}
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+            {/* <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
               <span className="sm:hidden">Export</span>
-            </button>
+            </button> */}
           </div>
           <button 
             onClick={() => window.location.href = '/create'}
@@ -542,9 +556,16 @@ export default function Surveys() {
                 <Edit className="w-4 h-4" />
                 Edit
               </button>
-              <button className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-purple-700 rounded-lg hover:from-purple-600 hover:to-purple-800 transition-all duration-200">
+              <button
+                onClick={() => {
+                  const id = (survey as { originalId?: string }).originalId || survey.id;
+                  setSelectedSurvey({ id, title: survey.title });
+                  setIsResponsesModalOpen(true);
+                }}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-purple-700 rounded-lg hover:from-purple-600 hover:to-purple-800 transition-all duration-200"
+              >
                 <BarChart3 className="w-4 h-4" />
-                View Results
+                View Responses
               </button>
             </div>
           </div>

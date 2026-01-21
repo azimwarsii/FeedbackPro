@@ -108,12 +108,12 @@ export default function BillingSubscriptionCard() {
               $99/month • Next billing: January 15, 2025
             </p>
             <div className="flex gap-2 mt-3">
-              <button className="px-3 py-1 text-xs font-medium text-brand-600 bg-brand-50 rounded-lg hover:bg-brand-100 dark:bg-brand-900/20 dark:text-brand-400 dark:hover:bg-brand-900/30">
+              {/* <button className="px-3 py-1 text-xs font-medium text-brand-600 bg-brand-50 rounded-lg hover:bg-brand-100 dark:bg-brand-900/20 dark:text-brand-400 dark:hover:bg-brand-900/30">
                 Change Plan
               </button>
               <button className="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600">
                 View Invoices
-              </button>
+              </button> */}
             </div>
           </div>
 

@@ -1,5 +1,7 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useSession } from "next-auth/react";
+import { SessionUser } from "@/types/session";
 import { 
   Wallet, 
   Plus, 
@@ -17,16 +19,22 @@ import {
   Banknote,
   Smartphone,
   Building2,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle,
+  Info
 } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import Button from "@/components/ui/button/Button";
 
 interface Transaction {
-  id: string;
-  description: string;
+  _id?: string;
+  id?: string;
+  description?: string;
   amount: number;
-  status: "completed" | "pending";
-  date: string;
   type: "credit" | "debit";
+  balanceAfter?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface PaymentMethod {
@@ -73,59 +81,108 @@ const paymentMethods: PaymentMethod[] = [
   }
 ];
 
-const mockTransactions: Transaction[] = [
-  {
-    id: "1",
-    description: "Payment from Client ABC",
-    amount: 2500.00,
-    status: "completed",
-    date: "2024-01-15",
-    type: "credit"
-  },
-  {
-    id: "2", 
-    description: "Subscription Renewal",
-    amount: -99.00,
-    status: "completed",
-    date: "2024-01-14",
-    type: "debit"
-  },
-  {
-    id: "3",
-    description: "Pending Payment from XYZ Corp",
-    amount: 1500.00,
-    status: "pending",
-    date: "2024-01-16",
-    type: "credit"
-  },
-  {
-    id: "4",
-    description: "Marketing Campaign Spend",
-    amount: -450.00,
-    status: "completed",
-    date: "2024-01-13",
-    type: "debit"
-  },
-  {
-    id: "5",
-    description: "Refund Processing",
-    amount: -75.00,
-    status: "pending",
-    date: "2024-01-12",
-    type: "debit"
-  }
-];
-
 export default function WalletDashboard() {
+  const { data: session } = useSession();
+  const userId = (session?.user as SessionUser)?.id;
+  
   const [isAddFundsModalOpen, setIsAddFundsModalOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [messageModal, setMessageModal] = useState<{ isOpen: boolean; type: "success" | "error" | "info"; title: string; message: string }>({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: "",
+  });
 
-  const availableBalance = 12500.00;
-  const pendingAmount = 1500.00;
-  const totalAdded = 45000.00;
-  const totalSpent = 32500.00;
+  const showMessage = (type: "success" | "error" | "info", title: string, message: string) => {
+    setMessageModal({ isOpen: true, type, title, message });
+  };
+
+  const closeMessage = () => {
+    setMessageModal({ ...messageModal, isOpen: false });
+  };
+
+  const getMessageIcon = () => {
+    switch (messageModal.type) {
+      case "success":
+        return <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />;
+      case "error":
+        return <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />;
+      case "info":
+        return <Info className="w-6 h-6 text-blue-600 dark:text-blue-400" />;
+    }
+  };
+
+  const getMessageColors = () => {
+    switch (messageModal.type) {
+      case "success":
+        return "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800";
+      case "error":
+        return "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800";
+      case "info":
+        return "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800";
+    }
+  };
+
+  const fetchWalletData = async () => {
+    if (!userId) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+
+    try {
+      const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/users/${encodeURIComponent(userId)}/wallet`, {
+        method: "GET",
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message)) || "Failed to load wallet data.";
+        setError(String(msg));
+        setBalance(0);
+        setTransactions([]);
+        return;
+      }
+
+      setBalance(data?.balance || 0);
+      setTransactions(Array.isArray(data?.transactions) ? data.transactions : []);
+    } catch (e) {
+      console.error("Error fetching wallet data:", e);
+      setError("Network error while loading wallet data.");
+      setBalance(0);
+      setTransactions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWalletData();
+  }, [userId]);
+
+  const totalAdded = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === "credit")
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  }, [transactions]);
+
+  const totalSpent = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === "debit")
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  }, [transactions]);
+
+  const pendingAmount = 0; // Transactions don't have status in your API, so no pending
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -134,26 +191,18 @@ export default function WalletDashboard() {
     }).format(amount);
   };
 
-  const getStatusBadge = (status: string) => {
-    if (status === "completed") {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full dark:bg-green-900/20 dark:text-green-400">
-          <CheckCircle className="w-3 h-3" />
-          Completed
-        </span>
-      );
-    }
+  const getStatusBadge = () => {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 rounded-full dark:bg-amber-900/20 dark:text-amber-400">
-        <Clock className="w-3 h-3" />
-        Pending
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full dark:bg-green-900/20 dark:text-green-400">
+        <CheckCircle className="w-3 h-3" />
+        Completed
       </span>
     );
   };
 
-  const getAmountColor = (amount: number) => {
-    return amount >= 0 
-      ? "text-green-600 dark:text-green-400" 
+  const getAmountColor = (type: "credit" | "debit") => {
+    return type === "credit"
+      ? "text-green-600 dark:text-green-400"
       : "text-red-600 dark:text-red-400";
   };
 
@@ -175,17 +224,58 @@ export default function WalletDashboard() {
   };
 
   const handleProcessPayment = async () => {
-    if (!amount || !selectedPaymentMethod) return;
-    
+    if (!amount || !selectedPaymentMethod || !userId) return;
+
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      showMessage("error", "Invalid Amount", "Please enter a valid amount greater than 0.");
+      return;
+    }
+
     setIsProcessing(true);
-    
-    // Simulate payment processing
-    setTimeout(() => {
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+
+    try {
+      const res = await fetch(
+        `${baseUrl.replace(/\/+$/, "")}/users/${encodeURIComponent(userId)}/wallet/add`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: amountNum,
+            description: `Added funds via ${selectedPaymentMethod}`,
+          }),
+        }
+      );
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const msg = (data && (data.error || data.message)) || "Failed to add funds.";
+        console.error("Add funds failed", { status: res.status, statusText: res.statusText, body: data });
+        showMessage("error", `Error ${res.status}`, msg);
+        setIsProcessing(false);
+        return;
+      }
+
+      // Update balance and refresh transactions
+      if (data?.balance !== undefined) {
+        setBalance(data.balance);
+      }
+      await fetchWalletData();
+
       setIsProcessing(false);
       handleCloseModal();
-      // Here you would typically show a success message or redirect
-      alert(`Successfully added ${formatCurrency(parseFloat(amount))} to your wallet!`);
-    }, 2000);
+      showMessage("success", "Funds Added", `Successfully added ${formatCurrency(amountNum)} to your wallet!`);
+    } catch (e) {
+      console.error("Error adding funds:", e);
+      showMessage("error", "Network Error", "Network error while adding funds. Please try again.");
+      setIsProcessing(false);
+    }
   };
 
   const calculateFee = (amount: number, methodId: string) => {
@@ -211,6 +301,31 @@ export default function WalletDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Message Modal */}
+      <Modal
+        isOpen={messageModal.isOpen}
+        onClose={closeMessage}
+        className="max-w-md"
+      >
+        <div className="p-6">
+          <div className={`flex items-start gap-4 p-4 rounded-lg border ${getMessageColors()}`}>
+            <div className="flex-shrink-0">{getMessageIcon()}</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {messageModal.title}
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                {messageModal.message}
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button onClick={closeMessage}>
+              OK
+            </Button>
+          </div>
+        </div>
+      </Modal>
       {/* Enhanced Header Section */}
       {/* <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -235,23 +350,27 @@ export default function WalletDashboard() {
       </div> */}
        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Customers</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Wallet Dashboard</h2>
           <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-            Manage your customer base and track engagement metrics
+            Manage your funds and track financial transactions
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
-              <RefreshCw className="w-4 h-4" />
+            <button
+              onClick={fetchWalletData}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Refresh</span>
               <span className="sm:hidden">Refresh</span>
             </button>
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+            {/* <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
               <span className="sm:hidden">Export</span>
-            </button>
+            </button> */}
           </div>
           <button 
             onClick={handleAddFunds}
@@ -272,8 +391,12 @@ export default function WalletDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Available Balance</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{formatCurrency(availableBalance)}</p>
-              <p className="mt-1 text-xs text-green-600 dark:text-green-400">+5.2% from last month</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                {isLoading ? "Loading..." : formatCurrency(balance)}
+              </p>
+              <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
+              </p>
             </div>
             <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
               <Wallet className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -287,7 +410,7 @@ export default function WalletDashboard() {
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
               <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{formatCurrency(pendingAmount)}</p>
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">2 transactions pending</p>
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">No pending transactions</p>
             </div>
             <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
               <Clock className="w-6 h-6 text-amber-600 dark:text-amber-400" />
@@ -339,37 +462,64 @@ export default function WalletDashboard() {
                 </button>
               </div>
             </div>
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {mockTransactions.map((transaction) => (
-                <div key={transaction.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-3 rounded-xl ${
-                        transaction.type === "credit" 
-                          ? "bg-green-100 dark:bg-green-900/20" 
-                          : "bg-red-100 dark:bg-red-900/20"
-                      }`}>
-                        {getAmountIcon(transaction.type)}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          {transaction.description}
-                        </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {new Date(transaction.date).toLocaleDateString()}
-                        </p>
+            {error && (
+              <div className="p-6 text-sm text-red-600 dark:text-red-400">
+                {error}
+              </div>
+            )}
+            {isLoading ? (
+              <div className="p-6 text-center text-gray-600 dark:text-gray-400">
+                Loading transactions...
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="p-6 text-center text-gray-600 dark:text-gray-400">
+                No transactions found.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {transactions.map((transaction) => {
+                  const id = transaction._id || transaction.id || "";
+                  const dateStr = transaction.createdAt || transaction.updatedAt || "";
+                  const displayAmount = transaction.type === "credit" ? transaction.amount : -Math.abs(transaction.amount);
+                  
+                  return (
+                    <div key={id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`p-3 rounded-xl ${
+                            transaction.type === "credit" 
+                              ? "bg-green-100 dark:bg-green-900/20" 
+                              : "bg-red-100 dark:bg-red-900/20"
+                          }`}>
+                            {getAmountIcon(transaction.type)}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white">
+                              {transaction.description || `${transaction.type === "credit" ? "Credit" : "Debit"} transaction`}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {dateStr ? new Date(dateStr).toLocaleDateString(undefined, {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }) : "—"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <p className={`text-lg font-bold ${getAmountColor(transaction.type)}`}>
+                            {displayAmount >= 0 ? "+" : ""}{formatCurrency(displayAmount)}
+                          </p>
+                          {getStatusBadge()}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <p className={`text-lg font-bold ${getAmountColor(transaction.amount)}`}>
-                        {transaction.amount >= 0 ? "+" : ""}{formatCurrency(transaction.amount)}
-                      </p>
-                      {getStatusBadge(transaction.status)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -404,20 +554,32 @@ export default function WalletDashboard() {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Income</span>
                 <span className="font-semibold text-green-600 dark:text-green-400">
-                  +{formatCurrency(4000)}
+                  +{formatCurrency(
+                    transactions
+                      .filter((t) => t.type === "credit")
+                      .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+                  )}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Expenses</span>
                 <span className="font-semibold text-red-600 dark:text-red-400">
-                  -{formatCurrency(2500)}
+                  -{formatCurrency(
+                    transactions
+                      .filter((t) => t.type === "debit")
+                      .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+                  )}
                 </span>
               </div>
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">Net</span>
-                  <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                    +{formatCurrency(1500)}
+                  <span className={`text-lg font-bold ${
+                    totalAdded - totalSpent >= 0
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}>
+                    {totalAdded - totalSpent >= 0 ? "+" : ""}{formatCurrency(totalAdded - totalSpent)}
                   </span>
                 </div>
               </div>

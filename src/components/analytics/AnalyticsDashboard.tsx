@@ -29,16 +29,6 @@ import LineChartOne from "@/components/charts/line/LineChartOne";
 import { useResponseStore } from "@/store/useResponseStore";
 import { useCampaignStore } from "@/store/useCampaignStore";
 
-interface Campaign {
-  id: number;
-  name: string;
-  conversionRate: number;
-  earnings: number;
-  status: "Active" | "Paused" | "Completed";
-  participants: number;
-  startDate: string;
-}
-
 interface Insight {
   id: number;
   title: string;
@@ -68,131 +58,76 @@ interface UserAnalytics {
   };
 }
 
-const mockCampaigns: Campaign[] = [
-  {
-    id: 1,
-    name: "Q4 Customer Satisfaction Survey",
-    conversionRate: 78.5,
-    earnings: 2450.00,
-    status: "Active",
-    participants: 1250,
-    startDate: "Dec 1, 2024"
-  },
-  {
-    id: 2,
-    name: "Product Feedback Campaign",
-    conversionRate: 65.2,
-    earnings: 1890.00,
-    status: "Active",
-    participants: 890,
-    startDate: "Nov 15, 2024"
-  },
-  {
-    id: 3,
-    name: "Brand Awareness Study",
-    conversionRate: 82.1,
-    earnings: 3200.00,
-    status: "Completed",
-    participants: 2100,
-    startDate: "Oct 20, 2024"
-  },
-  {
-    id: 4,
-    name: "Market Research Initiative",
-    conversionRate: 71.3,
-    earnings: 1560.00,
-    status: "Paused",
-    participants: 680,
-    startDate: "Dec 5, 2024"
-  }
-];
+const normalizeEmail = (value?: string) => (value || "").trim().toLowerCase();
+const normalizePhone = (value?: string) => (value || "").replace(/\D/g, "");
 
-const mockInsights: Insight[] = [
-  {
-    id: 1,
-    title: "Response Rate Improvement",
-    description: "Response rates have increased by 15% this month compared to last month, indicating better engagement strategies.",
-    type: "success",
-    icon: <TrendingUp className="w-5 h-5" />
-  },
-  {
-    id: 2,
-    title: "Peak Activity Hours",
-    description: "Most survey completions occur between 2-4 PM. Consider scheduling campaigns during these hours.",
-    type: "info",
-    icon: <Clock className="w-5 h-5" />
-  },
-  {
-    id: 3,
-    title: "Customer Retention Alert",
-    description: "Customer retention rate has dropped by 3% this week. Review engagement strategies and follow up with inactive users.",
-    type: "warning",
-    icon: <AlertTriangle className="w-5 h-5" />
-  }
-];
+const parseDate = (value?: string): Date | null => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 
-const mockUserAnalytics: UserAnalytics[] = [
-  {
-    id: "UA001",
-    customer: { name: "John Smith", phone: "+1 (555) 123-4567" },
-    campaign: "Q4 Customer Satisfaction",
-    location: { city: "New York", country: "USA", ip: "192.168.1.1" },
-    botDetection: "human",
-    completionTime: "3m 24s",
-    status: "completed",
-    reward: { amount: 15.00, status: "claimed" }
-  },
-  {
-    id: "UA002",
-    customer: { name: "Sarah Johnson", phone: "+1 (555) 987-6543" },
-    campaign: "Product Feedback",
-    location: { city: "Los Angeles", country: "USA", ip: "192.168.1.2" },
-    botDetection: "suspicious",
-    completionTime: "1m 12s",
-    status: "completed",
-    reward: { amount: 12.50, status: "pending" }
-  },
-  {
-    id: "UA003",
-    customer: { name: "Mike Wilson", phone: "+1 (555) 456-7890" },
-    campaign: "Brand Awareness",
-    location: { city: "Chicago", country: "USA", ip: "192.168.1.3" },
-    botDetection: "bot",
-    completionTime: "0m 45s",
-    status: "failed",
-    reward: { amount: 0, status: "pending" }
-  },
-  {
-    id: "UA004",
-    customer: { name: "Emily Davis", phone: "+1 (555) 321-0987" },
-    campaign: "Market Research",
-    location: { city: "Houston", country: "USA", ip: "192.168.1.4" },
-    botDetection: "human",
-    completionTime: "4m 18s",
-    status: "completed",
-    reward: { amount: 20.00, status: "claimed" }
-  },
-  {
-    id: "UA005",
-    customer: { name: "David Brown", phone: "+1 (555) 654-3210" },
-    campaign: "Customer Satisfaction",
-    location: { city: "Phoenix", country: "USA", ip: "192.168.1.5" },
-    botDetection: "human",
-    completionTime: "2m 56s",
-    status: "completed",
-    reward: { amount: 18.75, status: "claimed" }
-  },
-  {
-    id: "UA006",
-    customer: { name: "Lisa Anderson", phone: "+1 (555) 789-0123" },
-    campaign: "Product Feedback",
-    location: { city: "Philadelphia", country: "USA", ip: "192.168.1.6" },
-    botDetection: "suspicious",
-    completionTime: "0m 58s",
-    status: "pending",
-    reward: { amount: 10.00, status: "pending" }
+const getDateWindowStart = (filter: string) => {
+  const now = new Date();
+  const start = new Date(now);
+  switch (filter) {
+    case "Last 7 days":
+      start.setDate(now.getDate() - 7);
+      return start;
+    case "Last 30 days":
+      start.setDate(now.getDate() - 30);
+      return start;
+    case "Last 3 months":
+      start.setMonth(now.getMonth() - 3);
+      return start;
+    case "Last year":
+      start.setFullYear(now.getFullYear() - 1);
+      return start;
+    default:
+      start.setDate(now.getDate() - 30);
+      return start;
   }
-];
+};
+
+const classifyBot = (r: { bot_score?: number; is_suspected_bot?: boolean }) => {
+  const score = typeof r.bot_score === "number" ? r.bot_score : Number(r.bot_score || 0);
+  const suspected = Boolean(r.is_suspected_bot);
+  if (suspected && score >= 0.8) return "bot" as const;
+  if (suspected || score >= 0.5) return "suspicious" as const;
+  return "human" as const;
+};
+
+const getCampaignIdFromResponse = (r: unknown): string => {
+  const anyR = r as {
+    campaignId?: string;
+    campaign?: { _id?: string; id?: string } | string;
+  };
+
+  if (anyR?.campaignId) return String(anyR.campaignId);
+  if (typeof anyR?.campaign === "string") return anyR.campaign;
+  const cObj = anyR?.campaign as { _id?: string; id?: string } | undefined;
+  if (cObj?._id) return String(cObj._id);
+  if (cObj?.id) return String(cObj.id);
+  return "";
+};
+
+const getCampaignNameFromResponse = (r: unknown): string => {
+  const anyR = r as { campaign?: { name?: string } | string; campaignId?: string };
+  if (typeof anyR?.campaign === "object" && anyR.campaign?.name) return String(anyR.campaign.name);
+  return anyR?.campaignId ? String(anyR.campaignId) : "—";
+};
+
+const safeNumber = (value: unknown, fallback = 0) => {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const formatDuration = (ms: number) => {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+};
 
 export default function Analytics() {
   const responses = useResponseStore((state) => state.responses);
@@ -201,6 +136,16 @@ export default function Analytics() {
   const [dateFilter, setDateFilter] = useState("Last 30 days");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  const responsesInWindow = useMemo(() => {
+    const start = getDateWindowStart(dateFilter);
+    const now = new Date();
+    return responses.filter((r) => {
+      const d = parseDate(r.completed_at || r.started_at || r.createdAt);
+      if (!d) return false;
+      return d >= start && d <= now;
+    });
+  }, [responses, dateFilter]);
 
   // Calculate response rate metrics
   const responseRateMetrics = useMemo(() => {
@@ -271,6 +216,200 @@ export default function Analytics() {
       percentIncrease,
     };
   }, [responses, campaigns]);
+
+  const averageReward = useMemo(() => {
+    const paid = responsesInWindow.filter((r) => r.reward_status === "paid" && (r.reward_amount || 0) > 0);
+    const sum = paid.reduce((acc, r) => acc + (r.reward_amount || 0), 0);
+    return paid.length === 0 ? 0 : sum / paid.length;
+  }, [responsesInWindow]);
+
+  const rewardsClaimedTotal = useMemo(() => {
+    return responsesInWindow
+      .filter((r) => r.reward_status === "paid" && (r.reward_amount || 0) > 0)
+      .reduce((sum, r) => sum + (r.reward_amount || 0), 0);
+  }, [responsesInWindow]);
+
+  const averageCompletionTimeMs = useMemo(() => {
+    const completed = responsesInWindow
+      .map((r) => {
+        const s = parseDate(r.started_at);
+        const c = parseDate(r.completed_at);
+        if (!s || !c) return null;
+        return c.getTime() - s.getTime();
+      })
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0);
+    if (completed.length === 0) return 0;
+    return completed.reduce((a, b) => a + b, 0) / completed.length;
+  }, [responsesInWindow]);
+
+  const customerRetentionRate = useMemo(() => {
+    // "Repeat responder rate" within current window: responders who appear >=2 times / unique responders
+    const keys = responsesInWindow.map((r) => {
+      const e = normalizeEmail(r.responders_email);
+      const p = normalizePhone(r.responders_phone);
+      return e || p || "";
+    }).filter(Boolean);
+
+    const counts = new Map<string, number>();
+    keys.forEach((k) => counts.set(k, (counts.get(k) || 0) + 1));
+    const unique = counts.size;
+    const repeat = Array.from(counts.values()).filter((c) => c >= 2).length;
+    return unique === 0 ? 0 : (repeat / unique) * 100;
+  }, [responsesInWindow]);
+
+  const botSummary = useMemo(() => {
+    const counts = { human: 0, suspicious: 0, bot: 0 };
+    responsesInWindow.forEach((r) => {
+      const c = classifyBot(r);
+      counts[c] += 1;
+    });
+    return counts;
+  }, [responsesInWindow]);
+
+  const campaignPerformance = useMemo(() => {
+    const byCampaign = new Map<string, typeof responsesInWindow>();
+    responsesInWindow.forEach((r) => {
+      const id = getCampaignIdFromResponse(r);
+      if (!id) return;
+      const list = byCampaign.get(id) || [];
+      list.push(r);
+      byCampaign.set(id, list);
+    });
+
+    const mapped = campaigns.map((c) => {
+      const id = c._id || c.id || "";
+      const contacts = c.contacts?.length || 0;
+      const resp = byCampaign.get(id) || [];
+      const responsesCount = resp.length;
+      const conversionRate = contacts === 0 ? 0 : (responsesCount / contacts) * 100;
+      const rewardUtilizedFromCampaign = safeNumber(c.reward?.amount_utilized, 0);
+      const rewardUtilizedFromResponses = resp
+        .filter((r) => r.reward_status === "paid" && safeNumber(r.reward_amount, 0) > 0)
+        .reduce((sum, r) => sum + safeNumber(r.reward_amount, 0), 0);
+      const rewardUtilized =
+        rewardUtilizedFromCampaign > 0 ? rewardUtilizedFromCampaign : rewardUtilizedFromResponses;
+
+      const statusRaw = (c.status || "").toLowerCase();
+      const status =
+        statusRaw === "paused"
+          ? ("Paused" as const)
+          : statusRaw === "completed"
+            ? ("Completed" as const)
+            : ("Active" as const);
+
+      const startDate = c.createdAt
+        ? new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+        : "—";
+
+      return {
+        id,
+        name: c.name || "Untitled Campaign",
+        conversionRate,
+        rewardUtilized,
+        status,
+        participants: contacts,
+        startDate,
+      };
+    });
+
+    return mapped
+      .sort((a, b) => b.rewardUtilized - a.rewardUtilized)
+      .slice(0, 6);
+  }, [campaigns, responsesInWindow]);
+
+  const insights = useMemo<Insight[]>(() => {
+    const now = new Date();
+    const completedInWindow = responsesInWindow.filter((r) => Boolean(r.completed_at));
+    const peakHour = (() => {
+      const hours = new Array(24).fill(0);
+      completedInWindow.forEach((r) => {
+        const d = parseDate(r.completed_at || r.started_at || r.createdAt);
+        if (!d) return;
+        hours[d.getHours()] += 1;
+      });
+      const max = Math.max(...hours);
+      const idx = hours.findIndex((h) => h === max);
+      return max === 0 ? null : idx;
+    })();
+
+    const botRate = responsesInWindow.length === 0 ? 0 : (botSummary.bot / responsesInWindow.length) * 100;
+
+    const list: Insight[] = [
+      {
+        id: 1,
+        title: "Response Rate Trend",
+        description:
+          `Overall response rate is ${responseRateMetrics.overall.toFixed(1)}%. ` +
+          `Change vs last month: ${responseRateMetrics.percentIncrease >= 0 ? "+" : ""}${responseRateMetrics.percentIncrease.toFixed(1)}%.`,
+        type: responseRateMetrics.percentIncrease >= 0 ? "success" : "warning",
+        icon: responseRateMetrics.percentIncrease >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />,
+      },
+      {
+        id: 2,
+        title: "Peak Completion Hour",
+        description:
+          peakHour === null
+            ? "Not enough completions to determine peak hours yet."
+            : `Most completions occur around ${peakHour}:00–${(peakHour + 1) % 24}:00. Consider scheduling invites near that time.`,
+        type: "info",
+        icon: <Clock className="w-5 h-5" />,
+      },
+      {
+        id: 3,
+        title: "Bot & Fraud Signals",
+        description:
+          `In the selected period (${dateFilter}), bot-detected rate is ${botRate.toFixed(1)}%. ` +
+          `Suspicious: ${botSummary.suspicious}, Bots: ${botSummary.bot}.`,
+        type: botRate >= 5 ? "warning" : "success",
+        icon: botRate >= 5 ? <AlertTriangle className="w-5 h-5" /> : <Shield className="w-5 h-5" />,
+      },
+    ];
+
+    // Keep deterministic order
+    void now;
+    return list;
+  }, [responsesInWindow, botSummary, responseRateMetrics, dateFilter]);
+
+  const userAnalyticsRows = useMemo<UserAnalytics[]>(() => {
+    const rows = responsesInWindow.map((r, idx) => {
+      const id = (r._id || r.id || `R${idx}`) as string;
+      const detection = classifyBot(r);
+      const started = parseDate(r.started_at);
+      const completed = parseDate(r.completed_at);
+      const completionTime = started && completed ? formatDuration(completed.getTime() - started.getTime()) : "—";
+
+      const status: UserAnalytics["status"] =
+        detection === "bot" ? "failed" : completed ? "completed" : "pending";
+
+      const rewardAmount = r.reward_status === "paid" ? (r.reward_amount || 0) : 0;
+      const rewardStatus: UserAnalytics["reward"]["status"] = r.reward_status === "paid" ? "claimed" : "pending";
+
+      const campaignName = getCampaignNameFromResponse(r);
+
+      return {
+        id,
+        customer: {
+          name: normalizeEmail(r.responders_email) || "Responder",
+          phone: r.responders_phone || "—",
+        },
+        campaign: campaignName,
+        location: {
+          city: "—",
+          country: "—",
+          ip: r.ip_address || "—",
+        },
+        botDetection: detection,
+        completionTime,
+        status,
+        reward: {
+          amount: rewardAmount,
+          status: rewardStatus,
+        },
+      };
+    });
+
+    return rows;
+  }, [responsesInWindow]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -418,7 +557,7 @@ export default function Analytics() {
     }
   };
 
-  const filteredUserAnalytics = mockUserAnalytics.filter(user => {
+  const filteredUserAnalytics = userAnalyticsRows.filter(user => {
     const matchesSearch = user.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          user.customer.phone.includes(searchQuery) ||
                          user.campaign.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -476,11 +615,11 @@ export default function Analytics() {
                 </button>
               </div>
               
-              <button className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
+              {/* <button className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
                 <Download className="w-4 h-4" />
                 <span className="hidden sm:inline">Export Report</span>
                 <span className="sm:hidden">Export</span>
-              </button>
+              </button> */}
             </div>
           </div>
         </>
@@ -531,11 +670,11 @@ export default function Analytics() {
                 </button>
               </div>
               
-              <button className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
+              {/* <button className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base">
                 <Download className="w-4 h-4" />
                 <span className="hidden sm:inline">Export Report</span>
                 <span className="sm:hidden">Export</span>
-              </button>
+              </button> */}
             </div>
           </div>
 
@@ -575,10 +714,10 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Human Verified</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">4,247</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{botSummary.human.toLocaleString()}</p>
                   <div className="flex items-center mt-1">
-                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <p className="ml-1 text-xs text-green-600 dark:text-green-400">+8.2% from last month</p>
+                    <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <p className="ml-1 text-xs text-green-600 dark:text-green-400">From {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
@@ -592,10 +731,10 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Suspicious</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">156</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{botSummary.suspicious.toLocaleString()}</p>
                   <div className="flex items-center mt-1">
-                    <TrendingUp className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
-                    <p className="ml-1 text-xs text-yellow-600 dark:text-yellow-400">+2.1% from last month</p>
+                    <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                    <p className="ml-1 text-xs text-yellow-600 dark:text-yellow-400">From {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl">
@@ -609,10 +748,10 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Bot Detected</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">89</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{botSummary.bot.toLocaleString()}</p>
                   <div className="flex items-center mt-1">
-                    <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
-                    <p className="ml-1 text-xs text-red-600 dark:text-red-400">-12.5% from last month</p>
+                    <Bot className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    <p className="ml-1 text-xs text-red-600 dark:text-red-400">From {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
@@ -626,10 +765,12 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Rewards Claimed</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">$52,340</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(rewardsClaimedTotal)}
+                  </p>
                   <div className="flex items-center mt-1">
-                    <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <p className="ml-1 text-xs text-blue-600 dark:text-blue-400">+15.3% from last month</p>
+                    <Gift className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <p className="ml-1 text-xs text-blue-600 dark:text-blue-400">From {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
@@ -756,10 +897,10 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Average Reward</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">$12.50</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{formatCurrency(averageReward)}</p>
                   <div className="flex items-center mt-1">
-                    <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <p className="ml-1 text-xs text-green-600 dark:text-green-400">+5.2% from last month</p>
+                    <Award className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <p className="ml-1 text-xs text-blue-600 dark:text-blue-400">Paid rewards only · {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
@@ -773,10 +914,10 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Customer Retention</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">85.2%</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{customerRetentionRate.toFixed(1)}%</p>
                   <div className="flex items-center mt-1">
-                    <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
-                    <p className="ml-1 text-xs text-red-600 dark:text-red-400">-2.1% from last month</p>
+                    <Users className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <p className="ml-1 text-xs text-green-600 dark:text-green-400">Repeat responders in {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
@@ -790,10 +931,12 @@ export default function Analytics() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg Completion Time</p>
-                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">4.2m</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                    {averageCompletionTimeMs > 0 ? formatDuration(averageCompletionTimeMs).replace(" ", "") : "—"}
+                  </p>
                   <div className="flex items-center mt-1">
-                    <TrendingDown className="w-4 h-4 text-green-600 dark:text-green-400" />
-                    <p className="ml-1 text-xs text-green-600 dark:text-green-400">-0.8m from last month</p>
+                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <p className="ml-1 text-xs text-amber-600 dark:text-amber-400">Completed only · {dateFilter}</p>
                   </div>
                 </div>
                 <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
@@ -824,7 +967,36 @@ export default function Analytics() {
               </div>
             </div>
             <div className="p-6">
-              <LineChartOne />
+              <LineChartOne
+                categories={(() => {
+                  const now = new Date();
+                  const labels: string[] = [];
+                  for (let i = 11; i >= 0; i -= 1) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    labels.push(d.toLocaleDateString(undefined, { month: "short" }));
+                  }
+                  return labels;
+                })()}
+                series={(() => {
+                  const now = new Date();
+                  const buckets = new Array(12).fill(0);
+                  const completedBuckets = new Array(12).fill(0);
+                  const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+                  responses.forEach((r) => {
+                    const d = parseDate(r.completed_at || r.started_at || r.createdAt);
+                    if (!d) return;
+                    if (d < start || d > now) return;
+                    const idx = (d.getFullYear() - start.getFullYear()) * 12 + (d.getMonth() - start.getMonth());
+                    if (idx < 0 || idx > 11) return;
+                    buckets[idx] += 1;
+                    if (r.completed_at) completedBuckets[idx] += 1;
+                  });
+                  return [
+                    { name: "Responses", data: buckets },
+                    { name: "Completions", data: completedBuckets },
+                  ];
+                })()}
+              />
             </div>
           </div>
 
@@ -841,7 +1013,7 @@ export default function Analytics() {
                 </div>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {mockCampaigns.map((campaign) => (
+                {campaignPerformance.map((campaign) => (
                   <div key={campaign.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -856,10 +1028,10 @@ export default function Analytics() {
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-bold text-gray-900 dark:text-white">
-                          {formatCurrency(campaign.earnings)}
+                          {formatCurrency((campaign as { rewardUtilized?: number }).rewardUtilized || 0)}
                         </div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
-                          {campaign.conversionRate}% conversion
+                          {campaign.conversionRate.toFixed(2)}% conversion
                         </div>
                       </div>
                     </div>
@@ -875,7 +1047,7 @@ export default function Analytics() {
                 <p className="text-sm text-gray-600 dark:text-gray-400">Performance highlights and recommendations</p>
               </div>
               <div className="p-6 space-y-4">
-                {mockInsights.map((insight) => (
+                {insights.map((insight) => (
                   <div key={insight.id} className={`p-4 rounded-lg border ${getInsightColor(insight.type)}`}>
                     <div className="flex items-start gap-3">
                       <div className={`p-2 rounded-lg ${getInsightColor(insight.type)}`}>

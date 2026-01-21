@@ -171,7 +171,9 @@ export default function MonthlyTarget() {
             offsetY: -40,
             color: "#1D2939",
             formatter: function (val) {
-              return val + "%";
+              const n = typeof val === "number" ? val : Number(val);
+              if (!Number.isFinite(n)) return "0.00%";
+              return `${n.toFixed(2)}%`;
             },
           },
         },
@@ -247,7 +249,7 @@ export default function MonthlyTarget() {
               ? "bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-500" 
               : "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-500"
           }`}>
-            {overallIncrease >= 0 ? "+" : ""}{overallIncrease.toFixed(1)}%
+            {overallIncrease >= 0 ? "+" : ""}{overallIncrease.toFixed(2)}%
           </span>
         </div>
         <p className="mx-auto mt-10 w-full max-w-[380px] text-center text-sm text-gray-500 sm:text-base">
@@ -261,7 +263,7 @@ export default function MonthlyTarget() {
             1 Month
           </p>
           <p className="flex items-center justify-center gap-1 text-base font-semibold text-gray-800 dark:text-white/90 sm:text-lg">
-            {oneMonthRate.toFixed(1)}%
+            {oneMonthRate.toFixed(2)}%
             {oneMonthChange >= 0 ? (
               <svg
                 width="16"
@@ -303,7 +305,7 @@ export default function MonthlyTarget() {
             7 Days
           </p>
           <p className="flex items-center justify-center gap-1 text-base font-semibold text-gray-800 dark:text-white/90 sm:text-lg">
-            {sevenDaysRate.toFixed(1)}%
+            {sevenDaysRate.toFixed(2)}%
             {sevenDaysChange >= 0 ? (
               <svg
                 width="16"
@@ -345,7 +347,7 @@ export default function MonthlyTarget() {
           Today
           </p>
           <p className="flex items-center justify-center gap-1 text-base font-semibold text-gray-800 dark:text-white/90 sm:text-lg">
-            {todayRate.toFixed(1)}%
+            {todayRate.toFixed(2)}%
             {todayChange >= 0 ? (
               <svg
                 width="16"

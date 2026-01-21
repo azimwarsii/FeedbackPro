@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import InputField from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import { Plus, DollarSign, Users, FileText, MessageSquare, Mail, User, Search, File, CheckCircle, Gift, Upload, Sparkles, X, AlertCircle } from "lucide-react";
+import { Plus, DollarSign, Users, FileText, MessageSquare, Mail, User, Search, File, CheckCircle, Gift, Upload, Sparkles, X, AlertCircle, AlertTriangle, Info } from "lucide-react";
 import { useSurveysStore } from "@/store/useSurveysStore";
 import { useCampaignStore } from "@/store/useCampaignStore";
 import { useCustomerStore } from "@/store/useCustomerStore";
@@ -23,17 +23,35 @@ interface CustomerDisplay {
 export function CreateCampaignDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState("details");
+  const [messageModal, setMessageModal] = useState<{ isOpen: boolean; type: "success" | "error" | "info"; title: string; message: string }>({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: "",
+  });
   const surveys = useSurveysStore((state) => state.surveys);
   const addCampaign = useCampaignStore((state) => state.addCampaign);
   const storeCustomers = useCustomerStore((state) => state.customers);
   const { data: session } = useSession();
   const userId = (session?.user as SessionUser)?.id;
+
+  const showMessage = (type: "success" | "error" | "info", title: string, message: string) => {
+    setIsOpen(false);
+    setMessageModal({ isOpen: true, type, title, message });
+  };
+
+  const closeMessage = () => {
+    setMessageModal({ ...messageModal, isOpen: false });
+  };
   const [campaignData, setCampaignData] = useState({
     name: "",
     description: "",
     smsTemplate: "",
     surveyLink: "",
     selectedSurveyId: "",
+    surveyType: "internal" as "internal" | "external", // New field for survey type
+    externalSurveyLink: "", // New field for external survey URL
+    externalSurveyCode: "", // New field for 4-digit code
     contactMethod: "upload" as "upload" | "previous",
     contacts: null as File | null,
     selectedCustomers: [] as string[],
@@ -100,7 +118,7 @@ export function CreateCampaignDialog() {
         const emailIndex = headers.findIndex(h => h === 'email');
         
         if (nameIndex === -1 || phoneIndex === -1 || emailIndex === -1) {
-          alert("CSV file must contain 'name', 'phone', and 'email' columns");
+          showMessage("error", "Invalid File Format", "CSV file must contain 'name', 'phone', and 'email' columns");
           return;
         }
         
@@ -186,7 +204,7 @@ export function CreateCampaignDialog() {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | boolean | null)[][];
         
         if (jsonData.length === 0) {
-          alert("Excel file is empty");
+          showMessage("error", "Empty File", "Excel file is empty");
           return;
         }
         
@@ -196,7 +214,7 @@ export function CreateCampaignDialog() {
         const emailIndex = headers.findIndex(h => h === 'email');
         
         if (nameIndex === -1 || phoneIndex === -1 || emailIndex === -1) {
-          alert("Excel file must contain 'name', 'phone', and 'email' columns");
+          showMessage("error", "Invalid File Format", "Excel file must contain 'name', 'phone', and 'email' columns");
           return;
         }
         
@@ -273,23 +291,23 @@ export function CreateCampaignDialog() {
         setParsedContacts(contactsWithDuplicateErrors);
         setCampaignData(prev => ({ ...prev, contacts: file }));
       } else {
-        alert("Unsupported file format. Please upload CSV, XLS, or XLSX file.");
+        showMessage("error", "Unsupported Format", "Unsupported file format. Please upload CSV, XLS, or XLSX file.");
       }
     } catch (error) {
       console.error("Error parsing file:", error);
-      alert("Error parsing file. Please make sure the file format is correct.");
+      showMessage("error", "File Parse Error", "Error parsing file. Please make sure the file format is correct.");
     }
   };
 
   const handleCreateCampaign = async () => {
     try {
       if (!userId) {
-        alert("User not authenticated. Please sign in again.");
+        showMessage("error", "Authentication Required", "User not authenticated. Please sign in again.");
         return;
       }
 
       if (!campaignData.name) {
-        alert("Campaign name is required");
+        showMessage("error", "Validation Error", "Campaign name is required");
         return;
       }
 
@@ -306,7 +324,7 @@ export function CreateCampaignDialog() {
         );
 
         if (hasDuplicateErrors) {
-          alert("Please fix duplicate email or phone number errors before creating the campaign. Contacts with duplicates are highlighted in red.");
+          showMessage("error", "Duplicate Contacts", "Please fix duplicate email or phone number errors before creating the campaign. Contacts with duplicates are highlighted in red.");
           return;
         }
 
@@ -320,7 +338,7 @@ export function CreateCampaignDialog() {
           }));
         
         if (contacts.length === 0) {
-          alert("Please upload a file with valid contacts (all contacts must have name, phone, and email)");
+          showMessage("error", "No Valid Contacts", "Please upload a file with valid contacts (all contacts must have name, phone, and email)");
           return;
         }
       } else {
@@ -336,7 +354,7 @@ export function CreateCampaignDialog() {
         }));
         
         if (contacts.length === 0) {
-          alert("Please select at least one customer");
+          showMessage("error", "No Customers Selected", "Please select at least one customer");
           return;
         }
       }
@@ -352,7 +370,7 @@ export function CreateCampaignDialog() {
         if (campaignData.rewardType === "cash") {
           const amount = parseFloat(campaignData.rewardValue);
           if (!amount || amount <= 0) {
-            alert("Cash reward amount must be greater than 0");
+            showMessage("error", "Invalid Amount", "Cash reward amount must be greater than 0");
             return;
           }
           reward = {
@@ -361,11 +379,11 @@ export function CreateCampaignDialog() {
           };
         } else if (campaignData.rewardType === "promo") {
           if (!campaignData.rewardValue) {
-            alert("Promo code is required");
+            showMessage("error", "Missing Promo Code", "Promo code is required");
             return;
           }
           if (!campaignData.promoDescription) {
-            alert("Promo description is required");
+            showMessage("error", "Missing Description", "Promo description is required");
             return;
           }
           reward = {
@@ -376,16 +394,108 @@ export function CreateCampaignDialog() {
         }
       }
 
+      // Check wallet balance and deduct funds if cash reward is set
+      if (reward && reward.type === "cash reward" && reward.amount) {
+        const totalRewardCost = reward.amount * contacts.length;
+
+        // Fetch current wallet balance
+        try {
+          const walletRes = await fetch(
+            `${baseUrl.replace(/\/+$/, "")}/users/${encodeURIComponent(userId)}/wallet`,
+            { method: "GET" }
+          );
+
+          const walletData = await walletRes.json().catch(() => null);
+
+          if (!walletRes.ok) {
+            const msg = (walletData && (walletData.error || walletData.message)) || "Failed to check wallet balance.";
+            console.error("Wallet check failed", { status: walletRes.status, body: walletData });
+            showMessage("error", "Wallet Error", `Error checking wallet: ${msg}`);
+            return;
+          }
+
+          const currentBalance = walletData?.balance || 0;
+
+          if (currentBalance < totalRewardCost) {
+            showMessage(
+              "error",
+              "Insufficient Funds",
+              `You need $${totalRewardCost.toFixed(2)} but only have $${currentBalance.toFixed(2)} in your wallet. Please add funds before creating this campaign.`
+            );
+            return;
+          }
+
+          // Deduct funds from wallet
+          const deductRes = await fetch(
+            `${baseUrl.replace(/\/+$/, "")}/users/${encodeURIComponent(userId)}/wallet/deduct`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                amount: totalRewardCost,
+                description: `Campaign reward budget: ${campaignData.name}`,
+              }),
+            }
+          );
+
+          const deductData = await deductRes.json().catch(() => null);
+
+          if (!deductRes.ok) {
+            const msg = (deductData && (deductData.error || deductData.message)) || "Failed to deduct funds.";
+            console.error("Deduct funds failed", { status: deductRes.status, body: deductData });
+            showMessage("error", "Deduction Failed", `Error deducting funds: ${msg}`);
+            return;
+          }
+
+          console.log(`Successfully deducted $${totalRewardCost.toFixed(2)} from wallet for campaign rewards.`);
+        } catch (walletError) {
+          console.error("Error checking/deducting wallet:", walletError);
+          showMessage("error", "Transaction Error", "Error processing wallet transaction. Please try again.");
+          return;
+        }
+      }
+
       // Prepare request body with contacts (full JSON objects)
-      const requestBody = {
+      const requestBody: {
+        userId: string;
+        name: string;
+        description: string;
+        message_template: string;
+        contacts: Array<{ name: string; phone: string; email: string; filled?: false }>;
+        reward?: {
+          type: "cash reward" | "promo code";
+          amount?: number;
+          code?: string;
+          description?: string;
+        };
+        surveyId?: string;
+        externalSurveyLink?: string;
+        code?: string; // 4-digit code for external survey (matches backend schema)
+      } = {
         userId: userId,
         name: campaignData.name,
         description: campaignData.description || "",
         message_template: campaignData.smsTemplate || "",
         contacts: contacts, // Send full contact objects
         reward: reward,
-        surveyId: campaignData.selectedSurveyId || undefined
       };
+
+      // Add survey information based on type
+      if (campaignData.surveyType === "internal") {
+        if (campaignData.selectedSurveyId) {
+          requestBody.surveyId = campaignData.selectedSurveyId;
+        }
+      } else {
+        // External survey
+        if (campaignData.externalSurveyLink) {
+          requestBody.externalSurveyLink = campaignData.externalSurveyLink;
+        }
+        if (campaignData.externalSurveyCode) {
+          requestBody.code = campaignData.externalSurveyCode; // Backend expects 'code', not 'externalSurveyCode'
+        }
+      }
 
       const endpoint = `${baseUrl.replace(/\/+$/, "")}/campaigns`;
 
@@ -400,7 +510,7 @@ export function CreateCampaignDialog() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
         console.error("Failed to create campaign", errorData);
-        alert(`Failed to create campaign: ${errorData.error || response.statusText}`);
+        showMessage("error", "Campaign Creation Failed", `Failed to create campaign: ${errorData.error || response.statusText}`);
         return;
       }
 
@@ -426,16 +536,20 @@ export function CreateCampaignDialog() {
         });
       }
       
-      alert("Campaign created successfully!");
-      
-      // Reset form
+      // Reset form first
       setIsOpen(false);
+      
+      // Show success message (main modal already closed)
+      showMessage("success", "Campaign Created", "Campaign created successfully!");
       setCampaignData({
         name: "",
         description: "",
         smsTemplate: "",
         surveyLink: "",
         selectedSurveyId: "",
+        surveyType: "internal",
+        externalSurveyLink: "",
+        externalSurveyCode: "",
         contactMethod: "upload",
         contacts: null,
         selectedCustomers: [],
@@ -448,7 +562,7 @@ export function CreateCampaignDialog() {
       setCurrentStep("details");
     } catch (error) {
       console.error("Error creating campaign:", error);
-      alert("An error occurred while creating the campaign. Please try again.");
+      showMessage("error", "Unexpected Error", "An error occurred while creating the campaign. Please try again.");
     }
   };
 
@@ -458,7 +572,15 @@ export function CreateCampaignDialog() {
       case "details":
         return campaignData.name && campaignData.description;
       case "survey":
-        return !!campaignData.selectedSurveyId;
+        if (campaignData.surveyType === "internal") {
+          return !!campaignData.selectedSurveyId;
+        } else {
+          // External survey: need link and 4-digit code
+          return !!campaignData.externalSurveyLink && 
+                 !!campaignData.externalSurveyCode && 
+                 campaignData.externalSurveyCode.length === 4 &&
+                 /^\d{4}$/.test(campaignData.externalSurveyCode);
+        }
       case "sms":
         return campaignData.smsTemplate;
       case "contacts":
@@ -539,6 +661,28 @@ export function CreateCampaignDialog() {
     { id: "rewards", label: "Rewards", icon: Gift }
   ];
 
+  const getMessageIcon = () => {
+    switch (messageModal.type) {
+      case "success":
+        return <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />;
+      case "error":
+        return <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />;
+      case "info":
+        return <Info className="w-6 h-6 text-blue-600 dark:text-blue-400" />;
+    }
+  };
+
+  const getMessageColors = () => {
+    switch (messageModal.type) {
+      case "success":
+        return "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800";
+      case "error":
+        return "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800";
+      case "info":
+        return "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800";
+    }
+  };
+
   return (
     <>
       <button
@@ -549,6 +693,32 @@ export function CreateCampaignDialog() {
         <span className="hidden sm:inline">Create Campaign</span>
         <span className="sm:hidden">Create</span>
       </button>
+
+      {/* Message Modal */}
+      <Modal
+        isOpen={messageModal.isOpen}
+        onClose={closeMessage}
+        className="max-w-md"
+      >
+        <div className="p-6">
+          <div className={`flex items-start gap-4 p-4 rounded-lg border ${getMessageColors()}`}>
+            <div className="flex-shrink-0">{getMessageIcon()}</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {messageModal.title}
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                {messageModal.message}
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button onClick={closeMessage}>
+              OK
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="p-6">
@@ -653,27 +823,103 @@ export function CreateCampaignDialog() {
             <div className="space-y-4">
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Select Survey</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose an existing survey or create a new one for this campaign</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose an existing survey, create a new one, or add an external survey link</p>
                 
                 <div className="space-y-4">
+                  {/* Survey Type Selection */}
                   <div>
-                    <Label htmlFor="survey-select">Select Survey</Label>
-                    <select
-                      id="survey-select"
-                      value={campaignData.selectedSurveyId}
-                      onChange={(e) => setCampaignData(prev => ({ ...prev, selectedSurveyId: e.target.value }))}
-                      className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
-                    >
-                      <option value="">-- Select a survey --</option>
-                      {surveys.map((survey) => (
-                        <option key={survey._id || survey.id} value={survey._id || survey.id}>
-                          {survey.title}
-                        </option>
-                      ))}
-                    </select>
+                    <Label>Survey Type</Label>
+                    <div className="flex gap-4 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setCampaignData(prev => ({ 
+                          ...prev, 
+                          surveyType: "internal",
+                          externalSurveyLink: "",
+                          externalSurveyCode: "",
+                        }))}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
+                          campaignData.surveyType === "internal"
+                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400"
+                            : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-400"
+                        }`}
+                      >
+                        <span className="font-medium">Internal Survey</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCampaignData(prev => ({ 
+                          ...prev, 
+                          surveyType: "external",
+                          selectedSurveyId: "",
+                        }))}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
+                          campaignData.surveyType === "external"
+                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400"
+                            : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-400"
+                        }`}
+                      >
+                        <span className="font-medium">External Survey</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {campaignData.selectedSurveyId && (
+                  {/* Internal Survey Selection */}
+                  {campaignData.surveyType === "internal" && (
+                    <div>
+                      <Label htmlFor="survey-select">Select Survey</Label>
+                      <select
+                        id="survey-select"
+                        value={campaignData.selectedSurveyId}
+                        onChange={(e) => setCampaignData(prev => ({ ...prev, selectedSurveyId: e.target.value }))}
+                        className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                      >
+                        <option value="">-- Select a survey --</option>
+                        {surveys.map((survey) => (
+                          <option key={survey._id || survey.id} value={survey._id || survey.id}>
+                            {survey.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* External Survey Inputs */}
+                  {campaignData.surveyType === "external" && (
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="external-survey-link">External Survey Link</Label>
+                        <InputField
+                          id="external-survey-link"
+                          type="url"
+                          placeholder="https://example.com/survey"
+                          value={campaignData.externalSurveyLink}
+                          onChange={(e) => setCampaignData(prev => ({ ...prev, externalSurveyLink: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="external-survey-code">4-Digit Code</Label>
+                        <InputField
+                          id="external-survey-code"
+                          type="text"
+                          placeholder="1234"
+                          maxLength={4}
+                          value={campaignData.externalSurveyCode}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, ""); // Only allow digits
+                            if (value.length <= 4) {
+                              setCampaignData(prev => ({ ...prev, externalSurveyCode: value }));
+                            }
+                          }}
+                        />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Enter a 4-digit code for this external survey
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {campaignData.surveyType === "internal" && campaignData.selectedSurveyId && (
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                       <div className="flex items-start gap-3">
                         <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
@@ -693,6 +939,25 @@ export function CreateCampaignDialog() {
                             <span>
                               Status: {surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.status || "draft"}
                             </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {campaignData.surveyType === "external" && campaignData.externalSurveyLink && campaignData.externalSurveyCode && (
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <FileText className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-green-900 dark:text-green-100 mb-1">
+                            External Survey
+                          </h4>
+                          <p className="text-sm text-green-800 dark:text-green-200 break-all">
+                            {campaignData.externalSurveyLink}
+                          </p>
+                          <div className="mt-2 flex items-center gap-4 text-xs text-green-700 dark:text-green-300">
+                            <span>Code: {campaignData.externalSurveyCode}</span>
                           </div>
                         </div>
                       </div>

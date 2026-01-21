@@ -19,6 +19,7 @@ type Campaign = {
   budget: number;
   spent: number;
   endDate: string;
+  peopleInvited: number; // Number of people invited (contacts.length)
   rewardType?: "cash reward" | "promo code";
   promoCodesTotal?: number; // Total promo codes (contacts.length)
   promoCodesUtilized?: number; // codes_utilized from reward
@@ -131,6 +132,7 @@ const mapCampaignToDisplay = (storeCampaign: StoreCampaign): Campaign => {
     budget: Math.round(budget * 100) / 100,
     spent: Math.round(spent * 100) / 100,
     endDate,
+    peopleInvited: contactsCount,
     rewardType: storeCampaign.reward?.type,
     promoCodesTotal,
     promoCodesUtilized,
@@ -351,11 +353,11 @@ export default function Campaigns() {
               <span className="hidden sm:inline">Refresh</span>
               <span className="sm:hidden">Refresh</span>
             </button> */}
-            <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
+            {/* <button className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-1 sm:flex-none">
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
               <span className="sm:hidden">Export</span>
-            </button>
+            </button> */}
           </div>
           <CreateCampaignDialog />
         </div>
@@ -582,14 +584,14 @@ export default function Campaigns() {
                   </p>
                 </div>
 
-                {/* End Date */}
+                {/* People Invited */}
                 <div className="text-center group/metric">
                   <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-lg mx-auto mb-2 dark:bg-gray-800 transition-colors duration-200">
-                    <Calendar className="text-gray-600 w-5 h-5 dark:text-gray-400 transition-colors duration-200" />
+                    <Users className="text-gray-600 w-5 h-5 dark:text-gray-400 transition-colors duration-200" />
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">End Date</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">People Invited</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    {c.endDate}
+                    {c.peopleInvited}
                   </p>
                 </div>
               </div>

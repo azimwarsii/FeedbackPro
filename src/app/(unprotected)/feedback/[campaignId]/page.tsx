@@ -53,7 +53,9 @@ interface Campaign {
   name: string;
   description: string;
   contacts?: Array<{ name: string; email: string; phone: string; filled?: boolean }>;
-  survey?: string; // Survey ID
+  survey?: string; // Survey ID (undefined for external surveys)
+  externalSurveyLink?: string; // External survey URL
+  code?: string; // 4-digit code for external survey
   user?: string; // Campaign owner/user ID
   userId?: string; // Alternative field name for user ID
   responses?: number;
@@ -86,6 +88,8 @@ export default function FeedbackPage() {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [hiddenQuestions, setHiddenQuestions] = useState<Set<string>>(new Set());
+  const [externalSurveyCode, setExternalSurveyCode] = useState(""); // For external survey code input
+  const [codeVerified, setCodeVerified] = useState(false); // Track if code is verified
 
   // Honeypot field for bot detection (hidden from users)
   const [honeypot, setHoneypot] = useState("");
@@ -175,6 +179,10 @@ export default function FeedbackPage() {
         
         if (surveyData) {
           setSurvey(surveyData);
+        } else if (campaignData.externalSurveyLink) {
+          // External survey - no error, just don't set survey
+          // The UI will show external survey link and code input
+          console.log("External survey detected:", campaignData.externalSurveyLink);
         } else {
           setError("This campaign does not have a survey");
         }
@@ -1411,6 +1419,188 @@ export default function FeedbackPage() {
     );
   }
 
+  // Handle external survey code verification
+  const handleVerifyCode = async () => {
+    if (!campaign?.code) {
+      setError("No code is required for this external survey");
+      return;
+    }
+    
+    if (externalSurveyCode.length !== 4 || !/^\d{4}$/.test(externalSurveyCode)) {
+      setError("Please enter a valid 4-digit code");
+      return;
+    }
+    
+    if (externalSurveyCode !== campaign.code) {
+      setError("Invalid code. Please try again.");
+      return;
+    }
+
+    // Code is valid - mark user as completed
+    setCodeVerified(true);
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+      
+      if (!campaign || !session?.user?.email) {
+        setError("Missing required information. Please refresh and try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      // Get responder's email
+      const responderEmail = session.user.email.toLowerCase().trim();
+      const responderContact = campaign.contacts?.find(
+        c => c.email.toLowerCase().trim() === responderEmail
+      );
+      const responderPhone = responderContact?.phone || "";
+
+      // Get current campaign contacts
+      const currentContacts = campaign.contacts || [];
+      const updatedContacts = currentContacts.map(contact => {
+        if (contact.email.toLowerCase().trim() === responderEmail.toLowerCase().trim()) {
+          return { ...contact, filled: true };
+        }
+        return contact;
+      });
+
+      // Prepare campaign update payload
+      const campaignUpdatePayload: {
+        contacts: Array<{ name: string; email: string; phone: string; filled?: boolean }>;
+        responses: number;
+        reward?: {
+          type: "cash reward" | "promo code";
+          amount?: number;
+          amount_utilized?: number;
+          code?: string;
+          description?: string;
+          codes_utilized?: number;
+        };
+      } = {
+        contacts: updatedContacts,
+        responses: (campaign.responses || 0) + 1,
+      };
+
+      // Update reward utilization based on reward type
+      if (campaign.reward) {
+        if (campaign.reward.type === "cash reward" && campaign.reward.amount) {
+          campaignUpdatePayload.reward = {
+            ...campaign.reward,
+            amount_utilized: (campaign.reward.amount_utilized || 0) + campaign.reward.amount,
+          };
+        } else if (campaign.reward.type === "promo code") {
+          campaignUpdatePayload.reward = {
+            ...campaign.reward,
+            codes_utilized: (campaign.reward.codes_utilized || 0) + 1,
+          };
+        }
+      }
+
+      // Update campaign via API
+      const campaignUpdateResponse = await fetch(
+        `${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(campaignUpdatePayload),
+        }
+      );
+
+      if (!campaignUpdateResponse.ok) {
+        const errorData = await campaignUpdateResponse.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Failed to update campaign:", errorData);
+        setError(`Failed to mark survey as completed: ${errorData.error || "Unknown error"}`);
+        setSubmitting(false);
+        return;
+      }
+
+      // Update local campaign state
+      const updatedCampaign = {
+        ...campaign,
+        contacts: updatedContacts,
+        responses: (campaign.responses || 0) + 1,
+        reward: campaignUpdatePayload.reward || campaign.reward,
+      };
+      setCampaign(updatedCampaign);
+      
+      // Update campaign store
+      const { updateCampaignContact, incrementCampaignResponse, updateRewardUtilization } = useCampaignStore.getState();
+      updateCampaignContact(campaignId, responderEmail, true);
+      incrementCampaignResponse(campaignId);
+      if (campaign.reward?.type) {
+        updateRewardUtilization(campaignId, campaign.reward.type);
+      }
+
+      // Update customer to increment responses count
+      try {
+        const userId = campaign.user || campaign.userId || "";
+        if (userId) {
+          // First, fetch the current customer to get the current responses count
+          const getCustomerResponse = await fetch(
+            `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (getCustomerResponse.ok) {
+            const customerData = await getCustomerResponse.json();
+            const currentCustomer = customerData?.customer || customerData;
+            // Ensure responses is a number, not a string or array
+            const currentResponses = typeof currentCustomer?.responses === 'number' 
+              ? currentCustomer.responses 
+              : (typeof currentCustomer?.responses === 'string' 
+                  ? parseInt(currentCustomer.responses, 10) || 0 
+                  : 0);
+            
+            // Increment responses by 1 (ensure it's a number)
+            const newResponsesCount = Number(currentResponses) + 1;
+            
+            // Increment responses by 1
+            const customerUpdateResponse = await fetch(
+              `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
+              {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  responses: newResponsesCount,
+                }),
+              }
+            );
+
+            if (!customerUpdateResponse.ok) {
+              console.warn("Failed to update customer response count:", await customerUpdateResponse.json().catch(() => ({})));
+              // Don't fail the submission if customer update fails
+            }
+          } else {
+            console.warn("Failed to fetch customer for response count update");
+            // Don't fail the submission if customer fetch fails
+          }
+        }
+      } catch (err) {
+        console.warn("Error updating customer:", err);
+        // Don't fail the submission if customer update fails
+      }
+
+      // Mark as already filled so the "already completed" message shows
+      setAlreadyFilled(true);
+    } catch (err) {
+      console.error("Error verifying code and marking as completed:", err);
+      setError("An error occurred while marking the survey as completed. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Authentication check - Show welcome screen with campaign details
   if (status === "unauthenticated") {
     return (
@@ -1543,6 +1733,147 @@ export default function FeedbackPage() {
     );
   }
 
+
+  // Show external survey UI if campaign has external survey and no internal survey
+  // But not if already filled (that will be handled by the alreadyFilled check above)
+  if (campaign && !campaign.survey && campaign.externalSurveyLink && status === "authenticated" && emailVerified && !botDetected && !alreadyFilled) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 py-6 sm:py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-2xl mx-auto">
+          {/* External Survey Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-theme-lg p-6 sm:p-8 border border-gray-100 dark:border-gray-700/50">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full mb-4">
+                <FileText className="w-8 h-8 text-green-600 dark:text-green-400" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                External Survey
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                {campaign.name}
+              </p>
+            </div>
+
+            {/* External Survey Link */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 mb-6 border border-blue-200 dark:border-blue-800">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                Survey Link
+              </h3>
+              <div className="flex items-center gap-3 mb-4">
+                <a
+                  href={campaign.externalSurveyLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 break-all text-sm sm:text-base underline"
+                >
+                  {campaign.externalSurveyLink}
+                </a>
+                <a
+                  href={campaign.externalSurveyLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  Open Link
+                </a>
+              </div>
+            </div>
+
+            {/* Code Input Section */}
+            {campaign.code && (
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="external-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Enter 4-Digit Code
+                  </label>
+                  <div className="flex gap-3">
+                    <input
+                      id="external-code"
+                      type="text"
+                      maxLength={4}
+                      value={externalSurveyCode}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, ""); // Only allow digits
+                        if (value.length <= 4) {
+                          setExternalSurveyCode(value);
+                          setError(null);
+                        }
+                      }}
+                      placeholder="1234"
+                      className="flex-1 h-11 px-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-center text-lg font-mono tracking-widest"
+                    />
+                    <Button
+                      onClick={handleVerifyCode}
+                      disabled={externalSurveyCode.length !== 4 || codeVerified || submitting}
+                      className="px-6"
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
+                          Verifying...
+                        </>
+                      ) : codeVerified ? (
+                        "Verified ✓"
+                      ) : (
+                        "Verify"
+                      )}
+                    </Button>
+                  </div>
+                  {codeVerified && (
+                    <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      Code verified successfully!
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-4 p-4 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
+                <div className="flex items-start gap-3 text-error-800 dark:text-error-200">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm sm:text-base">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Instructions */}
+            <div className="mt-6 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                Instructions
+              </h3>
+              <ol className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                <li className="flex items-start gap-2">
+                  <span className="text-amber-600 dark:text-amber-400 mt-1">1.</span>
+                  <span>Click the "Open Link" button or copy the survey link above to open the external survey in a new tab</span>
+                </li>
+                {campaign.code && (
+                  <>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400 mt-1">2.</span>
+                      <span>Enter the 4-digit code provided to you in the field above and click "Verify"</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-amber-600 dark:text-amber-400 mt-1">3.</span>
+                      <span>Complete the survey on the external platform</span>
+                    </li>
+                  </>
+                )}
+                {!campaign.code && (
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-600 dark:text-amber-400 mt-1">2.</span>
+                    <span>Complete the survey on the external platform</span>
+                  </li>
+                )}
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show survey form
   if (showSurvey && survey) {
