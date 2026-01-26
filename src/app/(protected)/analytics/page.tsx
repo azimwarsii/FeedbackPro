@@ -2,7 +2,7 @@ import AnalyticsDashboard from "@/components/analytics/AnalyticsDashboard";
 import { Metadata } from "next";
 import React from "react";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = { 
   title: "Analytics | FeedbackPro",
   description:
     "Analytics for FeedbackPro",
