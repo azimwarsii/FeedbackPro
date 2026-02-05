@@ -31,6 +31,7 @@ export interface Campaign {
 	createdAt?: string;
 	updatedAt?: string;
 	status: string;
+	image?: string;
 }
 
 type CampaignsState = {

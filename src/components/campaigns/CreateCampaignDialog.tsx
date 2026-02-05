@@ -51,14 +51,16 @@ export function CreateCampaignDialog() {
     selectedSurveyId: "",
     surveyType: "internal" as "internal" | "external", // New field for survey type
     externalSurveyLink: "", // New field for external survey URL
-    externalSurveyCode: "", // New field for 4-digit code
-    contactMethod: "upload" as "upload" | "previous",
+    externalSurveyCode: "", // New field for 8-digit code
+    contactMethod: "upload" as "upload" | "previous" | "manual",
     contacts: null as File | null,
     selectedCustomers: [] as string[],
+    manualContacts: [] as Array<{ name: string; email: string; phone: string }>,
     rewardType: "",
     rewardValue: "",
     promoDescription: "",
-    budget: ""
+    budget: "",
+    image: ""
   });
 
   // Transform store customers to display format
@@ -70,12 +72,14 @@ export function CreateCampaignDialog() {
   }));
 
   const [customerSearch, setCustomerSearch] = useState("");
+  const [newManualContact, setNewManualContact] = useState({ name: "", email: "", phone: "" });
+
   const [parsedContacts, setParsedContacts] = useState<Array<{ name: string; phone: string; email: string; row: number; isValid: boolean; errors: string[] }>>([]);
 
   const filteredCustomers = existingCustomers.filter(customer => {
     const matchesSearch = customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                         customer.email.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                         customer.phone.toLowerCase().includes(customerSearch.toLowerCase());
+      customer.email.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      customer.phone.toLowerCase().includes(customerSearch.toLowerCase());
     return matchesSearch;
   });
 
@@ -91,7 +95,7 @@ export function CreateCampaignDialog() {
   const handleSelectAll = () => {
     const allFilteredIds = filteredCustomers.map(c => c.id);
     const allSelected = allFilteredIds.every(id => campaignData.selectedCustomers.includes(id));
-    
+
     setCampaignData(prev => ({
       ...prev,
       selectedCustomers: allSelected
@@ -106,42 +110,42 @@ export function CreateCampaignDialog() {
 
     try {
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      
+
       if (fileExtension === 'csv') {
         // Handle CSV
         const text = await file.text();
         const lines = text.split('\n').filter(line => line.trim());
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-        
+
         const nameIndex = headers.findIndex(h => h === 'name');
         const phoneIndex = headers.findIndex(h => h === 'phone');
         const emailIndex = headers.findIndex(h => h === 'email');
-        
+
         if (nameIndex === -1 || phoneIndex === -1 || emailIndex === -1) {
           showMessage("error", "Invalid File Format", "CSV file must contain 'name', 'phone', and 'email' columns");
           return;
         }
-        
+
         // Create sets of existing emails and phones for quick lookup
         // Note: storeCustomers is already filtered by current user, so duplicates are checked only within the current user's customers
         const existingEmails = new Set(storeCustomers.map(c => c.email.toLowerCase().trim()));
         const existingPhones = new Set(storeCustomers.map(c => c.phone.trim()));
-        
+
         // Track duplicates within the file itself
         const fileEmails = new Map<string, number>();
         const filePhones = new Map<string, number>();
-        
+
         const contacts = lines.slice(1).map((line, index) => {
           const values = line.split(',').map(v => v.trim());
           const name = values[nameIndex] || '';
           const phone = values[phoneIndex] || '';
           const email = values[emailIndex] || '';
-          
+
           const errors: string[] = [];
           if (!name) errors.push("Name is required");
           if (!phone) errors.push("Phone is required");
           if (!email) errors.push("Email is required");
-          
+
           // Check for duplicates in existing customers
           if (email && existingEmails.has(email.toLowerCase().trim())) {
             errors.push("Email already exists");
@@ -149,7 +153,7 @@ export function CreateCampaignDialog() {
           if (phone && existingPhones.has(phone.trim())) {
             errors.push("Phone already exists");
           }
-          
+
           // Track duplicates within the file
           if (email) {
             const emailKey = email.toLowerCase().trim();
@@ -158,7 +162,7 @@ export function CreateCampaignDialog() {
           if (phone) {
             filePhones.set(phone.trim(), (filePhones.get(phone.trim()) || 0) + 1);
           }
-          
+
           return {
             name,
             phone,
@@ -168,13 +172,13 @@ export function CreateCampaignDialog() {
             errors
           };
         });
-        
+
         // Check for duplicates within the file and add errors
         const contactsWithDuplicateErrors = contacts.map(contact => {
           const errors = [...contact.errors];
           const emailKey = contact.email.toLowerCase().trim();
           const phoneKey = contact.phone.trim();
-          
+
           if (contact.email && fileEmails.get(emailKey)! > 1) {
             if (!errors.includes("Email already exists")) {
               errors.push("Duplicate email in file");
@@ -185,14 +189,14 @@ export function CreateCampaignDialog() {
               errors.push("Duplicate phone in file");
             }
           }
-          
+
           return {
             ...contact,
             errors,
             isValid: errors.length === 0
           };
         });
-        
+
         setParsedContacts(contactsWithDuplicateErrors);
         setCampaignData(prev => ({ ...prev, contacts: file }));
       } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
@@ -202,41 +206,41 @@ export function CreateCampaignDialog() {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | boolean | null)[][];
-        
+
         if (jsonData.length === 0) {
           showMessage("error", "Empty File", "Excel file is empty");
           return;
         }
-        
+
         const headers = (jsonData[0] as (string | number | boolean | null)[]).map((h) => String(h || '').trim().toLowerCase());
         const nameIndex = headers.findIndex(h => h === 'name');
         const phoneIndex = headers.findIndex(h => h === 'phone');
         const emailIndex = headers.findIndex(h => h === 'email');
-        
+
         if (nameIndex === -1 || phoneIndex === -1 || emailIndex === -1) {
           showMessage("error", "Invalid File Format", "Excel file must contain 'name', 'phone', and 'email' columns");
           return;
         }
-        
+
         // Create sets of existing emails and phones for quick lookup
         // Note: storeCustomers is already filtered by current user, so duplicates are checked only within the current user's customers
         const existingEmails = new Set(storeCustomers.map(c => c.email.toLowerCase().trim()));
         const existingPhones = new Set(storeCustomers.map(c => c.phone.trim()));
-        
+
         // Track duplicates within the file itself
         const fileEmails = new Map<string, number>();
         const filePhones = new Map<string, number>();
-        
+
         const contacts = jsonData.slice(1).map((row: (string | number | boolean | null)[], index: number) => {
           const name = String(row[nameIndex] || '').trim();
           const phone = String(row[phoneIndex] || '').trim();
           const email = String(row[emailIndex] || '').trim();
-          
+
           const errors: string[] = [];
           if (!name) errors.push("Name is required");
           if (!phone) errors.push("Phone is required");
           if (!email) errors.push("Email is required");
-          
+
           // Check for duplicates in existing customers
           if (email && existingEmails.has(email.toLowerCase().trim())) {
             errors.push("Email already exists");
@@ -244,7 +248,7 @@ export function CreateCampaignDialog() {
           if (phone && existingPhones.has(phone.trim())) {
             errors.push("Phone already exists");
           }
-          
+
           // Track duplicates within the file
           if (email) {
             const emailKey = email.toLowerCase().trim();
@@ -253,7 +257,7 @@ export function CreateCampaignDialog() {
           if (phone) {
             filePhones.set(phone.trim(), (filePhones.get(phone.trim()) || 0) + 1);
           }
-          
+
           return {
             name,
             phone,
@@ -263,13 +267,13 @@ export function CreateCampaignDialog() {
             errors
           };
         });
-        
+
         // Check for duplicates within the file and add errors
         const contactsWithDuplicateErrors = contacts.map(contact => {
           const errors = [...contact.errors];
           const emailKey = contact.email.toLowerCase().trim();
           const phoneKey = contact.phone.trim();
-          
+
           if (contact.email && fileEmails.get(emailKey)! > 1) {
             if (!errors.includes("Email already exists")) {
               errors.push("Duplicate email in file");
@@ -280,14 +284,14 @@ export function CreateCampaignDialog() {
               errors.push("Duplicate phone in file");
             }
           }
-          
+
           return {
             ...contact,
             errors,
             isValid: errors.length === 0
           };
         });
-        
+
         setParsedContacts(contactsWithDuplicateErrors);
         setCampaignData(prev => ({ ...prev, contacts: file }));
       } else {
@@ -296,6 +300,58 @@ export function CreateCampaignDialog() {
     } catch (error) {
       console.error("Error parsing file:", error);
       showMessage("error", "File Parse Error", "Error parsing file. Please make sure the file format is correct.");
+    }
+  };
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (limit to 5MB for images)
+    if (file.size > 5 * 1024 * 1024) {
+      showMessage("error", "File Too Large", "Image size should be less than 5MB");
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      // In a real scenario, you would upload to Cloudinary, S3, or your backend
+      // For now, we'll use a mock upload or a common backend endpoint if available
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // We call our internal Next.js API route which handles the Cloudflare upload securely
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const imageUrl = data.url;
+        if (imageUrl) {
+          setCampaignData(prev => ({ ...prev, image: imageUrl }));
+          showMessage("success", "Image Uploaded", "Image uploaded successfully to Cloudflare!");
+        } else {
+          throw new Error("Invalid response from server");
+        }
+      } else {
+        // Fallback for demo: use Base64 if backend upload fails or doesn't exist
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          setCampaignData(prev => ({ ...prev, image: base64String }));
+          // Removed info message as requested
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      showMessage("error", "Upload Failed", "Failed to upload image. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -314,11 +370,11 @@ export function CreateCampaignDialog() {
       // Prepare contacts array (full JSON objects)
       let contacts: Array<{ name: string; phone: string; email: string; filled?: false }> = [];
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
-      
+
       if (campaignData.contactMethod === "upload") {
         // Check for duplicate errors
-        const hasDuplicateErrors = parsedContacts.some(c => 
-          c.errors.some(error => 
+        const hasDuplicateErrors = parsedContacts.some(c =>
+          c.errors.some(error =>
             error.includes("already exists") || error.includes("Duplicate")
           )
         );
@@ -336,23 +392,35 @@ export function CreateCampaignDialog() {
             phone: c.phone,
             email: c.email
           }));
-        
+
         if (contacts.length === 0) {
           showMessage("error", "No Valid Contacts", "Please upload a file with valid contacts (all contacts must have name, phone, and email)");
           return;
         }
+      } else if (campaignData.contactMethod === "manual") {
+        // Use manually entered contacts
+        contacts = campaignData.manualContacts.map(c => ({
+          name: c.name,
+          phone: c.phone,
+          email: c.email
+        }));
+
+        if (contacts.length === 0) {
+          showMessage("error", "No Contacts Added", "Please add at least one contact manually");
+          return;
+        }
       } else {
         // Use selected customers from existing customers
-        const selectedCustomersData = existingCustomers.filter(c => 
+        const selectedCustomersData = existingCustomers.filter(c =>
           campaignData.selectedCustomers.includes(c.id)
         );
-        
+
         contacts = selectedCustomersData.map(c => ({
           name: c.name,
           phone: c.phone,
           email: c.email
         }));
-        
+
         if (contacts.length === 0) {
           showMessage("error", "No Customers Selected", "Please select at least one customer");
           return;
@@ -472,7 +540,8 @@ export function CreateCampaignDialog() {
         };
         surveyId?: string;
         externalSurveyLink?: string;
-        code?: string; // 4-digit code for external survey (matches backend schema)
+        code?: string; // 8-digit code for external survey (matches backend schema)
+        image?: string;
       } = {
         userId: userId,
         name: campaignData.name,
@@ -480,6 +549,7 @@ export function CreateCampaignDialog() {
         message_template: campaignData.smsTemplate || "",
         contacts: contacts, // Send full contact objects
         reward: reward,
+        image: campaignData.image || ""
       };
 
       // Add survey information based on type
@@ -516,7 +586,7 @@ export function CreateCampaignDialog() {
 
       const data = await response.json();
       console.log("Campaign created successfully", data);
-      
+
       // Add campaign to store
       const createdCampaign = data?.campaign || data;
       if (createdCampaign) {
@@ -528,6 +598,7 @@ export function CreateCampaignDialog() {
           contacts: createdCampaign.contacts || contacts, // Store contacts (full JSON objects)
           reward: createdCampaign.reward,
           survey: createdCampaign.survey,
+          image: createdCampaign.image || campaignData.image,
           user: createdCampaign.user || userId,
           createdAt: createdCampaign.createdAt,
           updatedAt: createdCampaign.updatedAt,
@@ -535,10 +606,10 @@ export function CreateCampaignDialog() {
           status: "active"
         });
       }
-      
+
       // Reset form first
       setIsOpen(false);
-      
+
       // Show success message (main modal already closed)
       showMessage("success", "Campaign Created", "Campaign created successfully!");
       setCampaignData({
@@ -553,10 +624,12 @@ export function CreateCampaignDialog() {
         contactMethod: "upload",
         contacts: null,
         selectedCustomers: [],
+        manualContacts: [],
         rewardType: "",
         rewardValue: "",
         promoDescription: "",
-        budget: ""
+        budget: "",
+        image: ""
       });
       setParsedContacts([]);
       setCurrentStep("details");
@@ -575,24 +648,26 @@ export function CreateCampaignDialog() {
         if (campaignData.surveyType === "internal") {
           return !!campaignData.selectedSurveyId;
         } else {
-          // External survey: need link and 4-digit code
-          return !!campaignData.externalSurveyLink && 
-                 !!campaignData.externalSurveyCode && 
-                 campaignData.externalSurveyCode.length === 4 &&
-                 /^\d{4}$/.test(campaignData.externalSurveyCode);
+          // External survey: need link and 8-character code
+          return !!campaignData.externalSurveyLink &&
+            !!campaignData.externalSurveyCode &&
+            campaignData.externalSurveyCode.length === 8;
         }
       case "sms":
         return campaignData.smsTemplate;
       case "contacts":
         if (campaignData.contactMethod === "upload") {
           // Check for duplicate errors
-          const hasDuplicateErrors = parsedContacts.some(c => 
-            c.errors.some(error => 
+          const hasDuplicateErrors = parsedContacts.some(c =>
+            c.errors.some(error =>
               error.includes("already exists") || error.includes("Duplicate")
             )
           );
           if (hasDuplicateErrors) return false;
           return campaignData.contacts !== null && parsedContacts.length > 0 && parsedContacts.every(c => c.isValid);
+        } else if (campaignData.contactMethod === "manual") {
+          return campaignData.manualContacts.length > 0 &&
+            campaignData.manualContacts.every(c => c.name && c.email && c.phone);
         }
         return campaignData.selectedCustomers.length > 0;
       case "rewards":
@@ -627,20 +702,22 @@ export function CreateCampaignDialog() {
 
   // Calculate price based on contacts and rewards
   const calculatePrice = () => {
-    const numberOfRecipients = campaignData.contactMethod === "upload" 
+    const numberOfRecipients = campaignData.contactMethod === "upload"
       ? parsedContacts.filter(c => c.isValid).length // Use valid parsed contacts
-      : campaignData.selectedCustomers.length;
-    
-    const rewardPerPerson = campaignData.rewardType === "cash" 
-      ? parseFloat(campaignData.rewardValue) || 0 
+      : campaignData.contactMethod === "manual"
+        ? campaignData.manualContacts.length
+        : campaignData.selectedCustomers.length;
+
+    const rewardPerPerson = campaignData.rewardType === "cash"
+      ? parseFloat(campaignData.rewardValue) || 0
       : 0; // Promo codes don't have direct cost
-    
+
     const smsCostPerMessage = 0.02; // Average SMS cost
-    
+
     const totalRewardCost = numberOfRecipients * rewardPerPerson;
     const totalSmsCost = numberOfRecipients * smsCostPerMessage;
     const totalCost = totalRewardCost + totalSmsCost;
-    
+
     return {
       numberOfRecipients,
       rewardPerPerson,
@@ -732,24 +809,21 @@ export function CreateCampaignDialog() {
             <div className="hidden sm:flex items-center justify-center space-x-1">
               {steps.map((step, index) => (
                 <div key={step.id} className="flex items-center">
-                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors p-2 ${
-                    currentStep === step.id 
-                      ? "border-theme-purple-500 bg-theme-purple-500 text-white" 
-                      : isStepComplete(step.id)
+                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors p-2 ${currentStep === step.id
+                    ? "border-theme-purple-500 bg-theme-purple-500 text-white"
+                    : isStepComplete(step.id)
                       ? "border-green-500 bg-green-500 text-white"
                       : "border-gray-300 bg-gray-100 text-gray-500"
-                  }`}>
+                    }`}>
                     <step.icon className="w-4 h-4 flex-shrink-0" />
                   </div>
-                  <span className={`ml-1 text-xs font-medium whitespace-nowrap ${
-                    currentStep === step.id ? "text-gray-900 dark:text-white" : "text-gray-500"
-                  }`}>
+                  <span className={`ml-1 text-xs font-medium whitespace-nowrap ${currentStep === step.id ? "text-gray-900 dark:text-white" : "text-gray-500"
+                    }`}>
                     {step.label}
                   </span>
                   {index < 4 && (
-                    <div className={`w-4 h-0.5 mx-1 ${
-                      isStepComplete(step.id) ? "bg-green-500" : "bg-gray-300"
-                    }`} />
+                    <div className={`w-4 h-0.5 mx-1 ${isStepComplete(step.id) ? "bg-green-500" : "bg-gray-300"
+                      }`} />
                   )}
                 </div>
               ))}
@@ -760,19 +834,17 @@ export function CreateCampaignDialog() {
               <div className="flex items-center justify-center space-x-1 mb-2">
                 {steps.map((step, index) => (
                   <div key={step.id} className="flex items-center">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-colors p-1.5 ${
-                      currentStep === step.id 
-                        ? "border-theme-purple-500 bg-theme-purple-500 text-white" 
-                        : isStepComplete(step.id)
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-colors p-1.5 ${currentStep === step.id
+                      ? "border-theme-purple-500 bg-theme-purple-500 text-white"
+                      : isStepComplete(step.id)
                         ? "border-green-500 bg-green-500 text-white"
                         : "border-gray-300 bg-gray-100 text-gray-500"
-                    }`}>
+                      }`}>
                       <step.icon className="w-3 h-3 flex-shrink-0" />
                     </div>
                     {index < 4 && (
-                      <div className={`w-3 h-0.5 mx-1 ${
-                        isStepComplete(step.id) ? "bg-green-500" : "bg-gray-300"
-                      }`} />
+                      <div className={`w-3 h-0.5 mx-1 ${isStepComplete(step.id) ? "bg-green-500" : "bg-gray-300"
+                        }`} />
                     )}
                   </div>
                 ))}
@@ -791,7 +863,7 @@ export function CreateCampaignDialog() {
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Campaign Details</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Set up the basic information for your feedback campaign</p>
-                
+
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="campaign-name">Campaign Name</Label>
@@ -824,7 +896,7 @@ export function CreateCampaignDialog() {
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Select Survey</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose an existing survey, create a new one, or add an external survey link</p>
-                
+
                 <div className="space-y-4">
                   {/* Survey Type Selection */}
                   <div>
@@ -832,32 +904,30 @@ export function CreateCampaignDialog() {
                     <div className="flex gap-4 mt-2">
                       <button
                         type="button"
-                        onClick={() => setCampaignData(prev => ({ 
-                          ...prev, 
+                        onClick={() => setCampaignData(prev => ({
+                          ...prev,
                           surveyType: "internal",
                           externalSurveyLink: "",
                           externalSurveyCode: "",
                         }))}
-                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
-                          campaignData.surveyType === "internal"
-                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400"
-                            : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-400"
-                        }`}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${campaignData.surveyType === "internal"
+                          ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400"
+                          : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-400"
+                          }`}
                       >
                         <span className="font-medium">Internal Survey</span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCampaignData(prev => ({ 
-                          ...prev, 
+                        onClick={() => setCampaignData(prev => ({
+                          ...prev,
                           surveyType: "external",
                           selectedSurveyId: "",
                         }))}
-                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
-                          campaignData.surveyType === "external"
-                            ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400"
-                            : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-400"
-                        }`}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${campaignData.surveyType === "external"
+                          ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400"
+                          : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:border-gray-400"
+                          }`}
                       >
                         <span className="font-medium">External Survey</span>
                       </button>
@@ -899,23 +969,23 @@ export function CreateCampaignDialog() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="external-survey-code">4-Digit Code</Label>
+                        <Label htmlFor="external-survey-code">8-Character Code</Label>
                         <input
                           id="external-survey-code"
                           type="text"
-                          placeholder="1234"
-                          maxLength={4}
+                          placeholder="ABC12345"
+                          maxLength={8}
                           value={campaignData.externalSurveyCode}
                           onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, ""); // Only allow digits
-                            if (value.length <= 4) {
+                            const value = e.target.value;
+                            if (value.length <= 8) {
                               setCampaignData(prev => ({ ...prev, externalSurveyCode: value }));
                             }
                           }}
                           className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                         />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          Enter a 4-digit code for this external survey
+                          Enter an 8-character code for this external survey
                         </p>
                       </div>
                     </div>
@@ -934,8 +1004,8 @@ export function CreateCampaignDialog() {
                           </p>
                           <div className="mt-2 flex items-center gap-4 text-xs text-blue-700 dark:text-blue-300">
                             <span>
-                              {Array.isArray(surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.questions) 
-                                ? surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.questions.length 
+                              {Array.isArray(surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.questions)
+                                ? surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.questions.length
                                 : 0} questions
                             </span>
                             <span>
@@ -966,7 +1036,7 @@ export function CreateCampaignDialog() {
                     </div>
                   )}
 
-                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  {campaignData.surveyType === "internal" && (<div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                     <div className="relative my-4">
                       <div className="absolute inset-0 flex items-center">
                         <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
@@ -988,7 +1058,7 @@ export function CreateCampaignDialog() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
                       You&apos;ll be redirected to create a new survey. Come back here after creating it.
                     </p>
-                  </div>
+                  </div>)}
                 </div>
               </div>
             </div>
@@ -1000,7 +1070,7 @@ export function CreateCampaignDialog() {
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">SMS Template & Survey Link</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Create the message and survey link that will be sent to your customers</p>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* SMS Template Column */}
                   <div className="space-y-4">
@@ -1024,10 +1094,70 @@ export function CreateCampaignDialog() {
                         <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800">
                           {"{link}"}
                         </span>
+                        <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800">
+                          {"{image}"}
+                        </span>
                       </div>
                       <p className="text-sm text-gray-500 mt-2">
                         Use the variables above to personalize your message. Character count: {campaignData.smsTemplate.length}/160
                       </p>
+                    </div>
+
+                    {/* Image Upload UI */}
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <Label htmlFor="image-upload">Campaign Image (Optional)</Label>
+                      <div className="mt-2 text-left">
+                        {campaignData.image ? (
+                          <div className="relative inline-block">
+                            <img
+                              src={campaignData.image}
+                              alt="Campaign"
+                              className="w-32 h-32 object-cover rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm"
+                            />
+                            <button
+                              onClick={() => setCampaignData(prev => ({ ...prev, image: "" }))}
+                              className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                            <p className="mt-2 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> Image included
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <input
+                              type="file"
+                              id="image-upload"
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              className="hidden"
+                            />
+                            <label
+                              htmlFor="image-upload"
+                              className={`inline-flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed rounded-lg cursor-pointer transition-all ${isUploadingImage
+                                ? "bg-gray-50 border-gray-300 opacity-50"
+                                : "border-gray-300 hover:border-purple-400 hover:bg-purple-50 dark:border-gray-600 dark:hover:border-purple-500"
+                                }`}
+                            >
+                              {isUploadingImage ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                                  <span className="text-sm text-gray-600">Uploading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4 text-gray-400" />
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Upload Image</span>
+                                </>
+                              )}
+                            </label>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Upload an image to use with the {"{image}"} tag. Max 5MB.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1044,7 +1174,7 @@ export function CreateCampaignDialog() {
                         </code>
                       </div>
                     </div>
-                    
+
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <h4 className="font-medium text-blue-900 mb-2">SMS Tips:</h4>
                       <ul className="text-sm text-blue-800 space-y-1">
@@ -1063,17 +1193,19 @@ export function CreateCampaignDialog() {
                   <p className="text-sm font-mono bg-white dark:bg-gray-800 p-3 rounded border text-gray-900 dark:text-white">
                     {campaignData.smsTemplate
                       ? campaignData.smsTemplate
-                          .replace("{name}", "John Doe")
-                          .replace("{reward}", "$5 cash reward")
-                          .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`)
+                        .replace("{name}", "John Doe")
+                        .replace("{reward}", "$5 cash reward")
+                        .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`)
+                        .replace("{image}", campaignData.image ? "[Link to your image]" : "[Image link]")
                       : "Your personalized SMS message will appear here..."}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
                     Final character count: {campaignData.smsTemplate
                       ? campaignData.smsTemplate
-                          .replace("{name}", "John Doe")
-                          .replace("{reward}", "$5 cash reward")
-                          .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`).length
+                        .replace("{name}", "John Doe")
+                        .replace("{reward}", "$5 cash reward")
+                        .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`)
+                        .replace("{image}", campaignData.image ? "https://cdn.link/img.jpg" : "https://cdn.link/img.jpg").length
                       : 0}/160
                   </p>
                 </div>
@@ -1087,39 +1219,56 @@ export function CreateCampaignDialog() {
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Select Contacts</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Choose how you want to add contacts to this campaign</p>
-                
+
                 <div className="space-y-6">
                   {/* Contact Method Selection */}
-                  <div className="flex space-x-4">
+                  <div className="flex flex-wrap gap-3">
                     <Button
                       variant={campaignData.contactMethod === "upload" ? "primary" : "outline"}
                       onClick={() => {
-                        setCampaignData(prev => ({ 
-                          ...prev, 
-                          contactMethod: "upload", 
+                        setCampaignData(prev => ({
+                          ...prev,
+                          contactMethod: "upload",
                           selectedCustomers: [],
-                          contacts: null
+                          contacts: null,
+                          manualContacts: []
                         }));
                         setParsedContacts([]);
                       }}
-                       startIcon={<Plus className="w-4 h-4" />}
+                      startIcon={<Upload className="w-4 h-4" />}
                     >
-                      Upload New Contacts
+                      Upload Contacts
                     </Button>
                     <Button
-                      variant={campaignData.contactMethod === "previous" ? "primary" : "outline"}
+                      variant={campaignData.contactMethod === "manual" ? "primary" : "outline"}
                       onClick={() => {
-                        setCampaignData(prev => ({ 
-                          ...prev, 
-                          contactMethod: "previous", 
+                        setCampaignData(prev => ({
+                          ...prev,
+                          contactMethod: "manual",
                           contacts: null,
                           selectedCustomers: []
                         }));
                         setParsedContacts([]);
                       }}
-                       startIcon={<Users className="w-4 h-4" />}
+                      startIcon={<Plus className="w-4 h-4" />}
                     >
-                      Select from Preexisting Customers
+                      Add Manually
+                    </Button>
+                    <Button
+                      variant={campaignData.contactMethod === "previous" ? "primary" : "outline"}
+                      onClick={() => {
+                        setCampaignData(prev => ({
+                          ...prev,
+                          contactMethod: "previous",
+                          contacts: null,
+                          selectedCustomers: [],
+                          manualContacts: []
+                        }));
+                        setParsedContacts([]);
+                      }}
+                      startIcon={<Users className="w-4 h-4" />}
+                    >
+                      Select from Existing
                     </Button>
                   </div>
 
@@ -1127,44 +1276,40 @@ export function CreateCampaignDialog() {
                   {campaignData.contactMethod === "upload" && (
                     <div className="space-y-4">
                       <div className="relative">
-                        <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
-                          campaignData.contacts 
-                            ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20" 
-                            : "border-gray-300 hover:border-purple-400 hover:bg-purple-50 dark:border-gray-600 dark:hover:border-purple-500 dark:hover:bg-purple-900/10"
-                        }`}>
-                          <div className={`w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full transition-colors ${
-                            campaignData.contacts 
-                              ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" 
-                              : "bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500"
+                        <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${campaignData.contacts
+                          ? "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
+                          : "border-gray-300 hover:border-purple-400 hover:bg-purple-50 dark:border-gray-600 dark:hover:border-purple-500 dark:hover:bg-purple-900/10"
                           }`}>
+                          <div className={`w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full transition-colors ${campaignData.contacts
+                            ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500"
+                            }`}>
                             {campaignData.contacts ? (
                               <CheckCircle className="w-8 h-8" />
                             ) : (
                               <Upload className="w-8 h-8" />
                             )}
                           </div>
-                          
+
                           <div className="space-y-3">
                             <div>
-                              <p className={`text-lg font-semibold ${
-                                campaignData.contacts 
-                                  ? "text-green-900 dark:text-green-100" 
-                                  : "text-gray-900 dark:text-white"
-                              }`}>
+                              <p className={`text-lg font-semibold ${campaignData.contacts
+                                ? "text-green-900 dark:text-green-100"
+                                : "text-gray-900 dark:text-white"
+                                }`}>
                                 {campaignData.contacts ? "File Uploaded Successfully!" : "Upload Contact List"}
                               </p>
-                              <p className={`text-sm ${
-                                campaignData.contacts 
-                                  ? "text-green-700 dark:text-green-300" 
-                                  : "text-gray-600 dark:text-gray-400"
-                              }`}>
-                                {campaignData.contacts 
-                                  ? "Your contact file is ready to process" 
+                              <p className={`text-sm ${campaignData.contacts
+                                ? "text-green-700 dark:text-green-300"
+                                : "text-gray-600 dark:text-gray-400"
+                                }`}>
+                                {campaignData.contacts
+                                  ? "Your contact file is ready to process"
                                   : "Drag and drop your CSV or Excel file here, or click to browse"
                                 }
                               </p>
                             </div>
-                            
+
                             {campaignData.contacts ? (
                               <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-green-200 dark:border-green-700">
                                 <div className="flex items-center justify-between">
@@ -1214,7 +1359,7 @@ export function CreateCampaignDialog() {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                         <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
                           <FileText className="w-4 h-4" />
@@ -1280,35 +1425,32 @@ export function CreateCampaignDialog() {
                               </thead>
                               <tbody>
                                 {parsedContacts.map((contact, index) => (
-                                  <tr 
-                                    key={index} 
-                                    className={contact.isValid 
-                                      ? "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700" 
+                                  <tr
+                                    key={index}
+                                    className={contact.isValid
+                                      ? "bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                                       : "bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30"
                                     }
                                   >
                                     <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm text-gray-900 dark:text-white">
                                       {contact.row}
                                     </td>
-                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${
-                                      contact.name 
-                                        ? "text-gray-900 dark:text-white" 
-                                        : "text-red-600 dark:text-red-400 font-medium"
-                                    }`}>
+                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${contact.name
+                                      ? "text-gray-900 dark:text-white"
+                                      : "text-red-600 dark:text-red-400 font-medium"
+                                      }`}>
                                       {contact.name || "Missing"}
                                     </td>
-                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${
-                                      contact.phone 
-                                        ? "text-gray-900 dark:text-white" 
-                                        : "text-red-600 dark:text-red-400 font-medium"
-                                    }`}>
+                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${contact.phone
+                                      ? "text-gray-900 dark:text-white"
+                                      : "text-red-600 dark:text-red-400 font-medium"
+                                      }`}>
                                       {contact.phone || "Missing"}
                                     </td>
-                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${
-                                      contact.email 
-                                        ? "text-gray-900 dark:text-white" 
-                                        : "text-red-600 dark:text-red-400 font-medium"
-                                    }`}>
+                                    <td className={`border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm ${contact.email
+                                      ? "text-gray-900 dark:text-white"
+                                      : "text-red-600 dark:text-red-400 font-medium"
+                                      }`}>
                                       {contact.email || "Missing"}
                                     </td>
                                     <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm">
@@ -1343,6 +1485,162 @@ export function CreateCampaignDialog() {
                               {JSON.stringify(parsedContacts.map(c => ({ name: c.name, phone: c.phone, email: c.email })), null, 2)}
                             </pre>
                           </div> */}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Manual Contact Entry */}
+                  {campaignData.contactMethod === "manual" && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
+                          <Info className="w-4 h-4" />
+                          Add Contacts Manually
+                        </h4>
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          Enter contact information one at a time. All fields (name, email, phone) are required.
+                        </p>
+                      </div>
+
+                      {/* Add New Contact Form */}
+                      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add New Contact</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <Label htmlFor="manual-name">Name *</Label>
+                            <input
+                              id="manual-name"
+                              type="text"
+                              placeholder="John Doe"
+                              value={newManualContact.name}
+                              onChange={(e) => setNewManualContact(prev => ({ ...prev, name: e.target.value }))}
+                              className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="manual-email">Email *</Label>
+                            <input
+                              id="manual-email"
+                              type="email"
+                              placeholder="john@example.com"
+                              value={newManualContact.email}
+                              onChange={(e) => setNewManualContact(prev => ({ ...prev, email: e.target.value }))}
+                              className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="manual-phone">Phone *</Label>
+                            <input
+                              id="manual-phone"
+                              type="tel"
+                              placeholder="+1234567890"
+                              value={newManualContact.phone}
+                              onChange={(e) => setNewManualContact(prev => ({ ...prev, phone: e.target.value }))}
+                              className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <Button
+                            onClick={() => {
+                              if (!newManualContact.name || !newManualContact.email || !newManualContact.phone) {
+                                showMessage("error", "Missing Fields", "Please fill in all fields (name, email, phone)");
+                                return;
+                              }
+
+                              // Basic email validation
+                              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                              if (!emailRegex.test(newManualContact.email)) {
+                                showMessage("error", "Invalid Email", "Please enter a valid email address");
+                                return;
+                              }
+
+                              // Check for duplicate email
+                              const duplicateEmail = campaignData.manualContacts.some(
+                                c => c.email.toLowerCase().trim() === newManualContact.email.toLowerCase().trim()
+                              );
+                              if (duplicateEmail) {
+                                showMessage("error", "Duplicate Email", "This email address is already in the list");
+                                return;
+                              }
+
+                              // Check for duplicate phone
+                              const duplicatePhone = campaignData.manualContacts.some(
+                                c => c.phone.trim() === newManualContact.phone.trim()
+                              );
+                              if (duplicatePhone) {
+                                showMessage("error", "Duplicate Phone", "This phone number is already in the list");
+                                return;
+                              }
+
+                              setCampaignData(prev => ({
+                                ...prev,
+                                manualContacts: [...prev.manualContacts, { ...newManualContact }]
+                              }));
+                              setNewManualContact({ name: "", email: "", phone: "" });
+                            }}
+                            startIcon={<Plus className="w-4 h-4" />}
+                            disabled={!newManualContact.name || !newManualContact.email || !newManualContact.phone}
+                          >
+                            Add Contact
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Display Manual Contacts */}
+                      {campaignData.manualContacts.length > 0 && (
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white text-left">
+                              Added Contacts ({campaignData.manualContacts.length})
+                            </h4>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                              <thead className="bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Phone</th>
+                                  <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {campaignData.manualContacts.map((contact, index) => (
+                                  <tr
+                                    key={index}
+                                    className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                  >
+                                    <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm text-gray-900 dark:text-white">
+                                      {contact.name}
+                                    </td>
+                                    <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm text-gray-900 dark:text-white">
+                                      {contact.email}
+                                    </td>
+                                    <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm text-gray-900 dark:text-white">
+                                      {contact.phone}
+                                    </td>
+                                    <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm">
+                                      <button
+                                        onClick={() => {
+                                          setCampaignData(prev => ({
+                                            ...prev,
+                                            manualContacts: prev.manualContacts.filter((_, i) => i !== index)
+                                          }));
+                                        }}
+                                        className="p-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 rounded transition-colors"
+                                        title="Remove contact"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1403,7 +1701,7 @@ export function CreateCampaignDialog() {
                             </div>
                           </div>
                         ))}
-                        
+
                         {filteredCustomers.length === 0 && (
                           <div className="text-center py-8 text-gray-500">
                             <div className="w-8 h-8 mx-auto mb-2 opacity-50 flex items-center justify-center">
@@ -1437,12 +1735,12 @@ export function CreateCampaignDialog() {
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 text-left">Reward Configuration</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Set up the rewards customers will receive for completing feedback</p>
-                
+
                 <div className="space-y-4">
                   <div>
                     <Label>Reward Type</Label>
-                    <select 
-                      value={campaignData.rewardType} 
+                    <select
+                      value={campaignData.rewardType}
                       onChange={(e) => setCampaignData(prev => ({ ...prev, rewardType: e.target.value }))}
                       className="h-11 w-full rounded-lg border border-gray-300 appearance-none px-4 py-2.5 text-sm shadow-theme-xs focus:outline-hidden focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800 bg-transparent text-gray-800 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800"
                     >
@@ -1469,7 +1767,7 @@ export function CreateCampaignDialog() {
                             setCampaignData(prev => ({ ...prev, rewardValue: "" }));
                             return;
                           }
-                          
+
                           const numValue = parseFloat(value);
                           // Only update if it's a valid positive number greater than 0
                           if (!isNaN(numValue) && numValue > 0) {
@@ -1519,7 +1817,7 @@ export function CreateCampaignDialog() {
                         Reward Configuration
                       </h4>
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Details about the rewards customers will receive</p>
-                      
+
                       <div className="space-y-3">
                         <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-600">
                           <div className="flex items-center text-sm">
@@ -1537,7 +1835,7 @@ export function CreateCampaignDialog() {
                             <span className="text-gray-600 dark:text-gray-400">Reward Value</span>
                           </div>
                           <span className="font-medium text-gray-900 dark:text-white">
-                            {campaignData.rewardType === "cash" 
+                            {campaignData.rewardType === "cash"
                               ? `$${campaignData.rewardValue || "0.00"}`
                               : campaignData.rewardValue || "CODE"
                             }
@@ -1613,24 +1911,24 @@ export function CreateCampaignDialog() {
 
           {/* Navigation Buttons */}
           <div className="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setCurrentStep(getPreviousStep())}
               disabled={currentStep === "details"}
             >
               Previous
             </Button>
-            
+
             <div className="space-x-2">
               {currentStep !== "rewards" ? (
-                <Button 
+                <Button
                   onClick={() => setCurrentStep(getNextStep())}
                   disabled={!canProceedToNext()}
                 >
                   Next
                 </Button>
               ) : (
-                <Button 
+                <Button
                   onClick={handleCreateCampaign}
                   disabled={!canProceedToNext()}
                   className="bg-gradient-to-r from-theme-purple-500 to-theme-purple-600 hover:from-theme-purple-600 hover:to-theme-purple-700"

@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { 
-  Loader2, 
-  Shield, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Loader2,
+  Shield,
+  CheckCircle,
+  XCircle,
   AlertCircle,
   Star,
   FileText,
@@ -55,7 +55,7 @@ interface Campaign {
   contacts?: Array<{ name: string; email: string; phone: string; filled?: boolean }>;
   survey?: string; // Survey ID (undefined for external surveys)
   externalSurveyLink?: string; // External survey URL
-  code?: string; // 4-digit code for external survey
+  code?: string; // 8-digit code for external survey
   user?: string; // Campaign owner/user ID
   userId?: string; // Alternative field name for user ID
   responses?: number;
@@ -73,7 +73,7 @@ export default function FeedbackPage() {
   const params = useParams();
   const campaignId = params.campaignId as string;
   const { data: session, status } = useSession();
-  
+
   const [loading, setLoading] = useState(true);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [survey, setSurvey] = useState<Survey | null>(null);
@@ -109,6 +109,35 @@ export default function FeedbackPage() {
     suspiciousPatterns: 0,
   });
 
+  // Track user interaction for bot detection
+  useEffect(() => {
+    const handleMouseMove = () => {
+      setBotMetrics(prev => ({ ...prev, mouseMovements: prev.mouseMovements + 1 }));
+    };
+    const handleKeyDown = () => {
+      setBotMetrics(prev => ({ ...prev, keystrokes: prev.keystrokes + 1 }));
+    };
+    const handleScroll = () => {
+      setBotMetrics(prev => ({ ...prev, scrollEvents: prev.scrollEvents + 1 }));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScroll);
+
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      setBotMetrics(prev => ({ ...prev, timeOnPage: Math.floor((Date.now() - startTime) / 1000) }));
+    }, 1000);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScroll);
+      clearInterval(interval);
+    };
+  }, []);
+
   useEffect(() => {
     const fetchCampaign = async () => {
       try {
@@ -116,18 +145,18 @@ export default function FeedbackPage() {
         // Don't pass userId for public access - backend allows this for feedback links
         const url = `${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}`;
         console.log("Fetching campaign from:", url);
-        
+
         const response = await fetch(url, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
           },
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
           console.error("Campaign fetch error:", response.status, errorData);
-          
+
           if (response.status === 404) {
             setError("Campaign not found. Please check the link and try again.");
           } else if (response.status === 403) {
@@ -142,13 +171,13 @@ export default function FeedbackPage() {
         const data = await response.json();
         console.log("Campaign data received:", data);
         const campaignData = data?.campaign || data;
-        
+
         if (!campaignData || (!campaignData._id && !campaignData.id)) {
           setError("Invalid campaign data received");
           setLoading(false);
           return;
         }
-        
+
         setCampaign(campaignData);
 
         // Check if survey is populated or if we need to fetch it separately
@@ -176,7 +205,7 @@ export default function FeedbackPage() {
             }
           }
         }
-        
+
         if (surveyData) {
           setSurvey(surveyData);
         } else if (campaignData.externalSurveyLink) {
@@ -206,7 +235,7 @@ export default function FeedbackPage() {
       const userContact = (campaign.contacts || []).find(
         c => c.email.toLowerCase().trim() === userEmail
       );
-      
+
       if (userContact) {
         // Check if user has already filled the form
         if (userContact.filled === true) {
@@ -248,7 +277,7 @@ export default function FeedbackPage() {
   // Logic checks the current question's answer and applies action to targetQuestion
   const evaluateLogic = (logic: QuestionLogic, currentQuestionId: string, formData: Record<string, string | number | string[] | null>): boolean => {
     const sourceAnswer = formData[currentQuestionId];
-    
+
     // If no answer, condition is not met
     if (sourceAnswer === undefined || sourceAnswer === null || sourceAnswer === "") {
       return false;
@@ -256,8 +285,8 @@ export default function FeedbackPage() {
 
     // Convert answer to string for comparison
     // For arrays (multiple choice), join with comma
-    const sourceStr = Array.isArray(sourceAnswer) 
-      ? sourceAnswer.join(",") 
+    const sourceStr = Array.isArray(sourceAnswer)
+      ? sourceAnswer.join(",")
       : String(sourceAnswer);
     const compareStr = String(logic.value);
 
@@ -342,12 +371,12 @@ export default function FeedbackPage() {
 
     // Update hidden questions state
     setHiddenQuestions(newHiddenQuestions);
-    
+
     // Adjust current step if current question becomes hidden
     const visibleQuestions = survey.questions
       .filter(q => !newHiddenQuestions.has(q.id))
       .sort((a, b) => a.order - b.order);
-    
+
     if (visibleQuestions.length > 0) {
       if (!currentQuestionId || newHiddenQuestions.has(currentQuestionId)) {
         // Current question is now hidden, go to first visible question
@@ -365,24 +394,30 @@ export default function FeedbackPage() {
     }
   }, [survey, hiddenQuestions, currentStep]);
 
+  useEffect(() => {
+    if (!survey || !showSurvey) return;
+
+    applyQuestionLogic(formData);
+  }, [formData, survey, showSurvey, applyQuestionLogic]);
+
   // Adjust step when hidden questions change
   useEffect(() => {
     if (!survey) return;
-    
+
     const visibleQuestions = getVisibleQuestions();
-    
+
     if (visibleQuestions.length === 0) {
       if (currentStep !== 0) setCurrentStep(0);
       return;
     }
-    
+
     // If current step is beyond visible questions, adjust it
     if (currentStep >= visibleQuestions.length) {
       const newStep = Math.max(0, visibleQuestions.length - 1);
       if (newStep !== currentStep) setCurrentStep(newStep);
       return;
     }
-    
+
     // If current question is hidden, go to first visible
     const currentQuestion = visibleQuestions[currentStep];
     if (!currentQuestion && currentStep !== 0) {
@@ -390,183 +425,43 @@ export default function FeedbackPage() {
     }
   }, [hiddenQuestions, survey, currentStep, getVisibleQuestions]);
 
+  const surveyInitializedRef = React.useRef(false);
+
   // Show survey once all checks pass
   useEffect(() => {
-    if (emailVerified && !botDetected && survey && status === "authenticated") {
-      setShowSurvey(true);
-      // Record when survey was started
-      const startTime = new Date();
-      setStartedAt(prev => prev || startTime);
-      
-      // Reset step and initialize logic evaluation
-      setCurrentStep(0);
-      // Initialize hidden questions based on initial logic evaluation
-      // Start with all questions visible, then apply logic
-      const initialHidden = new Set<string>();
-      if (survey.questions) {
-        survey.questions.forEach((question) => {
-          if (question.logic && question.logic.length > 0) {
-            question.logic.forEach((rule) => {
-              if (!rule.targetQuestion || rule.targetQuestion.trim() === "") return;
-              
-              // For "show" actions, if condition not met initially, hide the target
-              if (rule.action === "show") {
-                const conditionMet = evaluateLogic(rule, question.id, formData);
-                if (!conditionMet) {
-                  initialHidden.add(rule.targetQuestion);
-                }
-              }
-            });
-          }
-        });
-      }
-      setHiddenQuestions(initialHidden);
-      // Apply full logic evaluation
-      applyQuestionLogic(formData);
-      
-      // Initialize bot detection tracking
-      // Track time on page
-      const timeInterval = setInterval(() => {
-        setBotMetrics(prev => ({
-          ...prev,
-          timeOnPage: prev.timeOnPage + 1
-        }));
-      }, 1000);
-
-      // Track mouse movements
-      const handleMouseMove = (e: MouseEvent) => {
-        setBotMetrics(prev => ({
-          ...prev,
-          mouseMovements: prev.mouseMovements + 1,
-          mousePositions: [
-            ...prev.mousePositions.slice(-49), // Keep last 50 positions
-            { x: e.clientX, y: e.clientY, timestamp: Date.now() }
-          ]
-        }));
-      };
-
-      // Track keyboard events
-      const handleKeyPress = () => {
-        const now = Date.now();
-        setBotMetrics(prev => {
-          const timeSinceLastKey = prev.lastTypingTime > 0 ? now - prev.lastTypingTime : 0;
-          const intervals = timeSinceLastKey > 0 && timeSinceLastKey < 10000 
-            ? [...prev.typingIntervals.slice(-19), timeSinceLastKey] 
-            : prev.typingIntervals;
-          
-          // Calculate average typing speed (keys per second)
-          const avgSpeed = intervals.length > 0
-            ? intervals.reduce((a, b) => a + b, 0) / intervals.length
-            : 0;
-
-          return {
-            ...prev,
-            keystrokes: prev.keystrokes + 1,
-            lastTypingTime: now,
-            typingIntervals: intervals,
-            averageTypingSpeed: avgSpeed
-          };
-        });
-      };
-
-      // Track scroll events
-      const handleScroll = () => {
-        setBotMetrics(prev => ({
-          ...prev,
-          scrollEvents: prev.scrollEvents + 1
-        }));
-      };
-
-      // Track focus/blur events
-      const handleFocus = () => {
-        setBotMetrics(prev => ({
-          ...prev,
-          focusEvents: prev.focusEvents + 1
-        }));
-      };
-
-      const handleBlur = () => {
-        setBotMetrics(prev => ({
-          ...prev,
-          blurEvents: prev.blurEvents + 1
-        }));
-      };
-
-      // Detect suspicious patterns
-      const detectSuspiciousPatterns = () => {
-        setBotMetrics(prev => {
-          let suspicious = prev.suspiciousPatterns;
-          
-          // Check for too fast typing (less than 50ms between keystrokes consistently)
-          if (prev.typingIntervals.length > 5) {
-            const veryFastTyping = prev.typingIntervals.filter(t => t < 50).length;
-            if (veryFastTyping > prev.typingIntervals.length * 0.3) {
-              suspicious += 1;
-            }
-          }
-          
-          // Check for too slow/mechanical typing (exactly same intervals)
-          if (prev.typingIntervals.length > 3) {
-            const uniqueIntervals = new Set(prev.typingIntervals.map(t => Math.round(t / 10) * 10));
-            if (uniqueIntervals.size < prev.typingIntervals.length * 0.3) {
-              suspicious += 1;
-            }
-          }
-          
-          // Check for mouse movements that are too linear (robotic)
-          if (prev.mousePositions.length > 10) {
-            const recentPositions = prev.mousePositions.slice(-10);
-            let linearCount = 0;
-            for (let i = 1; i < recentPositions.length; i++) {
-              const dx = recentPositions[i].x - recentPositions[i-1].x;
-              const dy = recentPositions[i].y - recentPositions[i-1].y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
-              const timeDiff = recentPositions[i].timestamp - recentPositions[i-1].timestamp;
-              // Perfectly linear movement (same speed, same direction)
-              if (timeDiff > 0 && distance / timeDiff < 0.1) {
-                linearCount++;
-              }
-            }
-            if (linearCount > recentPositions.length * 0.5) {
-              suspicious += 1;
-            }
-          }
-          
-          return { ...prev, suspiciousPatterns: suspicious };
-        });
-      };
-
-      // Set up event listeners
-      if (typeof window !== "undefined") {
-        window.addEventListener('mousemove', handleMouseMove, { passive: true });
-        window.addEventListener('keydown', handleKeyPress, { passive: true });
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        window.addEventListener('focus', handleFocus, { passive: true });
-        window.addEventListener('blur', handleBlur, { passive: true });
-      }
-      
-      // Run suspicious pattern detection periodically
-      const patternInterval = setInterval(detectSuspiciousPatterns, 2000);
-
-      // Cleanup function
-      return () => {
-        if (timeInterval) clearInterval(timeInterval);
-        if (patternInterval) clearInterval(patternInterval);
-        if (typeof window !== "undefined") {
-          try {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('keydown', handleKeyPress);
-            window.removeEventListener('scroll', handleScroll);
-            window.removeEventListener('focus', handleFocus);
-            window.removeEventListener('blur', handleBlur);
-          } catch (err) {
-            // Ignore errors during cleanup
-            console.warn("Error cleaning up event listeners:", err);
-          }
-        }
-      };
+    if (
+      surveyInitializedRef.current ||
+      !emailVerified ||
+      botDetected ||
+      !survey ||
+      status !== "authenticated"
+    ) {
+      return;
     }
-  }, [emailVerified, botDetected, survey, status, applyQuestionLogic, formData]);
+
+    surveyInitializedRef.current = true;
+
+    setShowSurvey(true);
+    setStartedAt(new Date());
+    setCurrentStep(0);
+
+    // Initial hidden questions (ONLY ONCE)
+    const initialHidden = new Set<string>();
+
+    survey.questions.forEach((question) => {
+      question.logic?.forEach((rule) => {
+        if (!rule.targetQuestion) return;
+
+        // For "show", hide by default unless condition is met
+        if (rule.action === "show") {
+          initialHidden.add(rule.targetQuestion);
+        }
+      });
+    });
+
+    setHiddenQuestions(initialHidden);
+  }, [emailVerified, botDetected, survey, status]);
+
 
   const handleSignIn = () => {
     signIn("google", { callbackUrl: window.location.href });
@@ -578,18 +473,18 @@ export default function FeedbackPage() {
       ...formData,
       [questionId]: value
     };
-    
+
     // Update state (async, but we use updatedFormData directly)
     setFormData(updatedFormData);
-    
+
     // Apply logic immediately with updated form data
     // This will evaluate all logic rules based on the new answer
     applyQuestionLogic(updatedFormData);
-    
+
     // Check if current question has jump_to logic that should auto-advance
     // We need to get the question from survey directly since state might be stale
     if (!survey) return;
-    
+
     const currentQuestion = survey.questions.find(q => q.id === questionId);
     if (currentQuestion && currentQuestion.logic) {
       // Get visible questions after logic is applied (will be updated by applyQuestionLogic)
@@ -597,7 +492,7 @@ export default function FeedbackPage() {
       setTimeout(() => {
         const visibleQuestions = getVisibleQuestions();
         const currentIndex = visibleQuestions.findIndex(q => q.id === questionId);
-        
+
         // Check for jump_to actions
         if (currentQuestion.logic) {
           for (const rule of currentQuestion.logic) {
@@ -614,18 +509,18 @@ export default function FeedbackPage() {
             }
           }
         }
-        
+
         // For single-choice and rating-scale, auto-advance to next question after selection
         // (unless there's a jump_to that was already handled)
-        if ((currentQuestion.type === "single-choice" || currentQuestion.type === "rating-scale") && 
-            currentIndex !== -1 && 
-            currentIndex < visibleQuestions.length - 1) {
+        if ((currentQuestion.type === "single-choice" || currentQuestion.type === "rating-scale") &&
+          currentIndex !== -1 &&
+          currentIndex < visibleQuestions.length - 1) {
           // Check if there's any jump_to logic that might prevent auto-advance
-          const hasJumpLogic = currentQuestion.logic?.some(rule => 
-            rule.action === "jump_to" && 
+          const hasJumpLogic = currentQuestion.logic?.some(rule =>
+            rule.action === "jump_to" &&
             evaluateLogic(rule, questionId, updatedFormData)
           );
-          
+
           if (!hasJumpLogic) {
             // Auto-advance to next question
             setCurrentStep(currentIndex + 1);
@@ -645,7 +540,7 @@ export default function FeedbackPage() {
   const handleNext = () => {
     const visibleQuestions = getVisibleQuestions();
     const currentQuestion = getCurrentQuestion();
-    
+
     if (!currentQuestion) return;
 
     // Check if current question has logic with jump_to action
@@ -708,20 +603,20 @@ export default function FeedbackPage() {
   const canProceed = () => {
     const currentQuestion = getCurrentQuestion();
     if (!currentQuestion) return false;
-    
+
     if (currentQuestion.required) {
       const answer = formData[currentQuestion.id];
       if (!answer || (Array.isArray(answer) && answer.length === 0)) {
         return false;
       }
     }
-    
+
     return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Bot detection check
     if (honeypot !== "") {
       setError("Bot detected. Submission blocked.");
@@ -735,7 +630,7 @@ export default function FeedbackPage() {
       const value = formData[q.id];
       return !value || (Array.isArray(value) && value.length === 0);
     });
-    
+
     if (missingFields.length > 0) {
       setError(`Please fill in all required fields: ${missingFields.map(q => q.title).join(", ")}`);
       return;
@@ -751,7 +646,7 @@ export default function FeedbackPage() {
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
-      
+
       // Get responder's phone number from campaign contacts
       const responderEmail = session.user.email.toLowerCase().trim();
       const responderContact = campaign.contacts?.find(
@@ -825,10 +720,10 @@ export default function FeedbackPage() {
         if (mousePositions.length > 10) {
           let linearMovements = 0;
           for (let i = 1; i < mousePositions.length; i++) {
-            const dx = mousePositions[i].x - mousePositions[i-1].x;
-            const dy = mousePositions[i].y - mousePositions[i-1].y;
+            const dx = mousePositions[i].x - mousePositions[i - 1].x;
+            const dy = mousePositions[i].y - mousePositions[i - 1].y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            const timeDiff = mousePositions[i].timestamp - mousePositions[i-1].timestamp;
+            const timeDiff = mousePositions[i].timestamp - mousePositions[i - 1].timestamp;
             // Check for perfectly linear movement
             if (timeDiff > 0 && distance > 0 && Math.abs(dx / dy - 1) < 0.1) {
               linearMovements++;
@@ -868,8 +763,8 @@ export default function FeedbackPage() {
         });
 
       // Get reward amount from campaign
-      const rewardAmount = campaign.reward?.type === "cash reward" 
-        ? campaign.reward.amount || 0 
+      const rewardAmount = campaign.reward?.type === "cash reward"
+        ? campaign.reward.amount || 0
         : undefined;
 
       // Get timestamps
@@ -889,7 +784,7 @@ export default function FeedbackPage() {
         // IP will be captured server-side from request headers
         console.warn("Could not fetch IP address client-side:", err);
       }
-      
+
       // Get user_id (campaign owner)
       const userId = campaign.user || campaign.userId || "";
 
@@ -943,15 +838,15 @@ export default function FeedbackPage() {
             const customerData = await getCustomerResponse.json();
             const currentCustomer = customerData?.customer || customerData;
             // Ensure responses is a number, not a string or array
-            const currentResponses = typeof currentCustomer?.responses === 'number' 
-              ? currentCustomer.responses 
-              : (typeof currentCustomer?.responses === 'string' 
-                  ? parseInt(currentCustomer.responses, 10) || 0 
-                  : 0);
-            
+            const currentResponses = typeof currentCustomer?.responses === 'number'
+              ? currentCustomer.responses
+              : (typeof currentCustomer?.responses === 'string'
+                ? parseInt(currentCustomer.responses, 10) || 0
+                : 0);
+
             // Increment responses by 1 (ensure it's a number)
             const newResponsesCount = Number(currentResponses) + 1;
-            
+
             // Increment responses by 1
             const customerUpdateResponse = await fetch(
               `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
@@ -1046,7 +941,7 @@ export default function FeedbackPage() {
               reward: campaignUpdatePayload.reward || campaign.reward,
             };
             setCampaign(updatedCampaign);
-            
+
             // Update campaign store
             const { updateCampaignContact, incrementCampaignResponse, updateRewardUtilization } = useCampaignStore.getState();
             updateCampaignContact(campaignId, responderEmail, true);
@@ -1087,7 +982,7 @@ export default function FeedbackPage() {
                 ...survey,
                 responses: (survey.responses || 0) + 1,
               });
-              
+
               // Update survey store
               const { incrementSurveyResponse } = useSurveysStore.getState();
               incrementSurveyResponse(surveyId);
@@ -1113,7 +1008,7 @@ export default function FeedbackPage() {
 
   const renderQuestion = (question: Question) => {
     const baseInputClasses = "w-full px-4 py-3 text-sm sm:text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 dark:focus:ring-brand-400 dark:focus:border-brand-400 transition-all duration-200";
-    
+
     switch (question.type) {
       case "short-text":
         return (
@@ -1126,7 +1021,7 @@ export default function FeedbackPage() {
             required={question.required}
           />
         );
-      
+
       case "long-text":
         return (
           <textarea
@@ -1138,7 +1033,7 @@ export default function FeedbackPage() {
             required={question.required}
           />
         );
-      
+
       case "multiple-choice":
         return (
           <div className="space-y-3">
@@ -1146,15 +1041,14 @@ export default function FeedbackPage() {
               const currentValue = formData[question.id];
               const currentArray = Array.isArray(currentValue) ? currentValue : [];
               const isChecked = currentArray.includes(option);
-              
+
               return (
-                <label 
-                  key={index} 
-                  className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all duration-200 ${
-                    isChecked
-                      ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400"
-                      : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                  }`}
+                <label
+                  key={index}
+                  className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all duration-200 ${isChecked
+                    ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400"
+                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    }`}
                 >
                   <input
                     type="checkbox"
@@ -1176,18 +1070,17 @@ export default function FeedbackPage() {
             })}
           </div>
         );
-      
+
       case "single-choice":
         return (
           <div className="space-y-3">
             {question.options?.map((option, index) => (
-              <label 
-                key={index} 
-                className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all duration-200 ${
-                  formData[question.id] === option
-                    ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400"
-                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                }`}
+              <label
+                key={index}
+                className={`flex items-center gap-3 cursor-pointer p-4 rounded-lg border-2 transition-all duration-200 ${formData[question.id] === option
+                  ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10 dark:border-brand-400"
+                  : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  }`}
               >
                 <input
                   type="radio"
@@ -1205,7 +1098,7 @@ export default function FeedbackPage() {
             ))}
           </div>
         );
-      
+
       case "rating-scale":
         return (
           <div className="flex flex-wrap gap-3 sm:gap-4 justify-center sm:justify-start py-2">
@@ -1213,17 +1106,16 @@ export default function FeedbackPage() {
               const ratingValue = formData[question.id];
               const numericValue = typeof ratingValue === 'number' ? ratingValue : 0;
               const isSelected = numericValue >= i + 1;
-              
+
               return (
                 <button
                   key={i}
                   type="button"
                   onClick={() => handleInputChange(question.id, i + 1)}
-                  className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl transition-all duration-200 flex items-center justify-center ${
-                    isSelected
-                      ? "text-yellow-400 bg-yellow-50 dark:bg-yellow-400/10 scale-110 shadow-lg"
-                      : "text-gray-300 dark:text-gray-600 hover:text-yellow-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:scale-105"
-                  }`}
+                  className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl transition-all duration-200 flex items-center justify-center ${isSelected
+                    ? "text-yellow-400 bg-yellow-50 dark:bg-yellow-400/10 scale-110 shadow-lg"
+                    : "text-gray-300 dark:text-gray-600 hover:text-yellow-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:scale-105"
+                    }`}
                 >
                   <Star className="w-full h-full fill-current" />
                 </button>
@@ -1231,7 +1123,7 @@ export default function FeedbackPage() {
             })}
           </div>
         );
-      
+
       case "date":
         return (
           <input
@@ -1242,7 +1134,7 @@ export default function FeedbackPage() {
             required={question.required}
           />
         );
-      
+
       case "email":
         return (
           <input
@@ -1254,7 +1146,7 @@ export default function FeedbackPage() {
             required={question.required}
           />
         );
-      
+
       case "phone":
         return (
           <input
@@ -1266,7 +1158,7 @@ export default function FeedbackPage() {
             required={question.required}
           />
         );
-      
+
       case "number":
         return (
           <input
@@ -1278,7 +1170,7 @@ export default function FeedbackPage() {
             required={question.required}
           />
         );
-      
+
       default:
         return null;
     }
@@ -1404,7 +1296,7 @@ export default function FeedbackPage() {
 
           {/* Logout Button */}
           <div className="space-y-3">
-            <Button 
+            <Button
               onClick={() => signOut({ callbackUrl: window.location.href })}
               className="w-full"
             >
@@ -1425,12 +1317,12 @@ export default function FeedbackPage() {
       setError("No code is required for this external survey");
       return;
     }
-    
-    if (externalSurveyCode.length !== 4 || !/^\d{4}$/.test(externalSurveyCode)) {
-      setError("Please enter a valid 4-digit code");
+
+    if (externalSurveyCode.length !== 8) {
+      setError("Please enter a valid 8-character code");
       return;
     }
-    
+
     if (externalSurveyCode !== campaign.code) {
       setError("Invalid code. Please try again.");
       return;
@@ -1443,7 +1335,7 @@ export default function FeedbackPage() {
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
-      
+
       if (!campaign || !session?.user?.email) {
         setError("Missing required information. Please refresh and try again.");
         setSubmitting(false);
@@ -1522,7 +1414,7 @@ export default function FeedbackPage() {
         reward: campaignUpdatePayload.reward || campaign.reward,
       };
       setCampaign(updatedCampaign);
-      
+
       // Update campaign store
       const { updateCampaignContact, incrementCampaignResponse, updateRewardUtilization } = useCampaignStore.getState();
       updateCampaignContact(campaignId, responderEmail, true);
@@ -1550,15 +1442,15 @@ export default function FeedbackPage() {
             const customerData = await getCustomerResponse.json();
             const currentCustomer = customerData?.customer || customerData;
             // Ensure responses is a number, not a string or array
-            const currentResponses = typeof currentCustomer?.responses === 'number' 
-              ? currentCustomer.responses 
-              : (typeof currentCustomer?.responses === 'string' 
-                  ? parseInt(currentCustomer.responses, 10) || 0 
-                  : 0);
-            
+            const currentResponses = typeof currentCustomer?.responses === 'number'
+              ? currentCustomer.responses
+              : (typeof currentCustomer?.responses === 'string'
+                ? parseInt(currentCustomer.responses, 10) || 0
+                : 0);
+
             // Increment responses by 1 (ensure it's a number)
             const newResponsesCount = Number(currentResponses) + 1;
-            
+
             // Increment responses by 1
             const customerUpdateResponse = await fetch(
               `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
@@ -1715,10 +1607,10 @@ export default function FeedbackPage() {
             <Button onClick={handleSignIn} className="w-full text-lg py-4">
               <span className="flex items-center justify-center gap-2">
                 <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18.7511 10.1944C18.7511 9.47495 18.6915 8.94995 18.5626 8.40552H10.1797V11.6527H15.1003C15.0011 12.4597 14.4654 13.675 13.2749 14.4916L13.2582 14.6003L15.9087 16.6126L16.0924 16.6305C17.7788 15.1041 18.7511 12.8583 18.7511 10.1944Z" fill="#4285F4"/>
-                  <path d="M10.1788 18.75C12.5895 18.75 14.6133 17.9722 16.0915 16.6305L13.274 14.4916C12.5201 15.0068 11.5081 15.3666 10.1788 15.3666C7.81773 15.3666 5.81379 13.8402 5.09944 11.7305L4.99473 11.7392L2.23868 13.8295L2.20264 13.9277C3.67087 16.786 6.68674 18.75 10.1788 18.75Z" fill="#34A853"/>
-                  <path d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z" fill="#FBBC05"/>
-                  <path d="M10.1789 4.63331C11.8554 4.63331 12.9864 5.34303 13.6312 5.93612L16.1511 3.525C14.6035 2.11528 12.5895 1.25 10.1789 1.25C6.68676 1.25 3.67088 3.21387 2.20264 6.07218L5.08953 8.26943C5.81381 6.15972 7.81776 4.63331 10.1789 4.63331Z" fill="#EB4335"/>
+                  <path d="M18.7511 10.1944C18.7511 9.47495 18.6915 8.94995 18.5626 8.40552H10.1797V11.6527H15.1003C15.0011 12.4597 14.4654 13.675 13.2749 14.4916L13.2582 14.6003L15.9087 16.6126L16.0924 16.6305C17.7788 15.1041 18.7511 12.8583 18.7511 10.1944Z" fill="#4285F4" />
+                  <path d="M10.1788 18.75C12.5895 18.75 14.6133 17.9722 16.0915 16.6305L13.274 14.4916C12.5201 15.0068 11.5081 15.3666 10.1788 15.3666C7.81773 15.3666 5.81379 13.8402 5.09944 11.7305L4.99473 11.7392L2.23868 13.8295L2.20264 13.9277C3.67087 16.786 6.68674 18.75 10.1788 18.75Z" fill="#34A853" />
+                  <path d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z" fill="#FBBC05" />
+                  <path d="M10.1789 4.63331C11.8554 4.63331 12.9864 5.34303 13.6312 5.93612L16.1511 3.525C14.6035 2.11528 12.5895 1.25 10.1789 1.25C6.68676 1.25 3.67088 3.21387 2.20264 6.07218L5.08953 8.26943C5.81381 6.15972 7.81776 4.63331 10.1789 4.63331Z" fill="#EB4335" />
                 </svg>
                 Sign in with Google to Continue
               </span>
@@ -1780,23 +1672,23 @@ export default function FeedbackPage() {
               <div className="space-y-4">
                 <div>
                   <label htmlFor="external-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Enter 4-Digit Code
+                    Enter 8-Character Code
                   </label>
                   <div className="flex gap-3">
                     <input
                       id="external-code"
                       type="text"
-                      maxLength={4}
+                      maxLength={8}
                       value={externalSurveyCode}
                       onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, ""); // Only allow digits
-                        if (value.length <= 4) {
+                        const value = e.target.value;
+                        if (value.length <= 8) {
                           setExternalSurveyCode(value);
                           setError(null);
                         }
                       }}
-                      placeholder="1234"
-                      className="flex-1 h-11 px-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-center text-lg font-mono tracking-widest"
+                      placeholder="ABC12345"
+                      className="flex-1 h-11 px-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-center text-lg font-mono tracking-widest uppercase"
                     />
                     <Button
                       onClick={handleVerifyCode}
@@ -1849,7 +1741,7 @@ export default function FeedbackPage() {
                   <>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-600 dark:text-amber-400 mt-1">2.</span>
-                      <span>Enter the 4-digit code provided to you in the field above and click &quot;Verify&quot;</span>
+                      <span>Enter the 8-character code provided to you in the field above and click &quot;Verify&quot;</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-600 dark:text-amber-400 mt-1">3.</span>
@@ -1902,105 +1794,105 @@ export default function FeedbackPage() {
 
           {/* Question Form */}
           {currentQuestion && (
-            <form 
-              onSubmit={(e) => { e.preventDefault(); handleNext(); }} 
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleNext(); }}
               className="bg-white dark:bg-gray-800 rounded-2xl shadow-theme-lg p-6 sm:p-8 md:p-10 border border-gray-100 dark:border-gray-700/50 relative overflow-hidden"
             >
               {/* Decorative background element */}
               <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-brand-100/30 to-purple-100/30 dark:from-brand-900/20 dark:to-purple-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
               <div className="relative z-10">
-              {/* Honeypot field - hidden from users */}
-              <input
-                type="text"
-                name="website"
-                value={honeypot}
-                onChange={(e) => setHoneypot(e.target.value)}
-                style={{ position: "absolute", left: "-9999px", opacity: 0, pointerEvents: "none" }}
-                tabIndex={-1}
-                autoComplete="off"
-              />
+                {/* Honeypot field - hidden from users */}
+                <input
+                  type="text"
+                  name="website"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                  style={{ position: "absolute", left: "-9999px", opacity: 0, pointerEvents: "none" }}
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
 
-              {/* Current Question */}
-              <div className="mb-8">
-                <div className="mb-6 pb-4 border-b border-gray-100 dark:border-gray-700/50">
-                  <label className="block">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex-shrink-0 mt-1">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-500/20">
-                          <span className="text-sm font-bold text-brand-600 dark:text-brand-400">
-                            Q
-                          </span>
+                {/* Current Question */}
+                <div className="mb-8">
+                  <div className="mb-6 pb-4 border-b border-gray-100 dark:border-gray-700/50">
+                    <label className="block">
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-500/20">
+                            <span className="text-sm font-bold text-brand-600 dark:text-brand-400">
+                              Q
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start gap-2 flex-wrap">
-                          <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
-                            {currentQuestion.title}
-                          </span>
-                          {currentQuestion.required && (
-                            <span className="text-error-500 text-xl sm:text-2xl font-bold mt-0.5">*</span>
+                        <div className="flex-1">
+                          <div className="flex items-start gap-2 flex-wrap">
+                            <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
+                              {currentQuestion.title}
+                            </span>
+                            {currentQuestion.required && (
+                              <span className="text-error-500 text-xl sm:text-2xl font-bold mt-0.5">*</span>
+                            )}
+                          </div>
+                          {currentQuestion.description && (
+                            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-3 leading-relaxed">
+                              {currentQuestion.description}
+                            </p>
                           )}
                         </div>
-                        {currentQuestion.description && (
-                          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-3 leading-relaxed">
-                            {currentQuestion.description}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  </label>
-                </div>
-                <div className="mt-6">
-                  {renderQuestion(currentQuestion)}
-                </div>
-              </div>
-
-              {error && (
-                <div className="mb-6 p-4 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
-                  <div className="flex items-start gap-3 text-error-800 dark:text-error-200">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm sm:text-base">{error}</p>
+                    </label>
+                  </div>
+                  <div className="mt-6">
+                    {renderQuestion(currentQuestion)}
                   </div>
                 </div>
-              )}
 
-              {/* Navigation Buttons */}
-              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={currentStep === 0}
-                  className="w-full sm:w-auto sm:min-w-[120px]"
-                >
-                  Previous
-                </Button>
+                {error && (
+                  <div className="mb-6 p-4 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
+                    <div className="flex items-start gap-3 text-error-800 dark:text-error-200">
+                      <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm sm:text-base">{error}</p>
+                    </div>
+                  </div>
+                )}
 
-                {currentStep < visibleQuestions.length - 1 ? (
+                {/* Navigation Buttons */}
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <Button
                     type="button"
-                    variant="primary"
-                    onClick={handleNext}
-                    disabled={!canProceed()}
+                    variant="outline"
+                    onClick={handlePrevious}
+                    disabled={currentStep === 0}
                     className="w-full sm:w-auto sm:min-w-[120px]"
                   >
-                    Next
+                    Previous
                   </Button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={(e: React.MouseEvent) => {
-                      e.preventDefault();
-                      handleSubmit(e as unknown as React.FormEvent);
-                    }}
-                    disabled={!canProceed() || submitting}
-                    className="w-full sm:w-auto sm:min-w-[140px] inline-flex items-center justify-center font-medium gap-2 rounded-lg transition px-5 py-3.5 text-sm bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600 disabled:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {submitting ? "Submitting..." : "Submit Survey"}
-                  </button>
-                )}
-              </div>
+
+                  {currentStep < visibleQuestions.length - 1 ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleNext}
+                      disabled={!canProceed()}
+                      className="w-full sm:w-auto sm:min-w-[120px]"
+                    >
+                      Next
+                    </Button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e: React.MouseEvent) => {
+                        e.preventDefault();
+                        handleSubmit(e as unknown as React.FormEvent);
+                      }}
+                      disabled={!canProceed() || submitting}
+                      className="w-full sm:w-auto sm:min-w-[140px] inline-flex items-center justify-center font-medium gap-2 rounded-lg transition px-5 py-3.5 text-sm bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600 disabled:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {submitting ? "Submitting..." : "Submit Survey"}
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           )}

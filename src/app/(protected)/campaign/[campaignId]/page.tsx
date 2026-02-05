@@ -27,7 +27,7 @@ export default function CampaignDetailsPage() {
     description: "",
     message_template: ""
   });
-  
+
   const campaign = campaigns.find(c => (c._id || c.id) === campaignId);
 
   if (!campaign) {
@@ -64,7 +64,7 @@ export default function CampaignDetailsPage() {
   const totalContacts = campaign.contacts?.length || 0;
   const responses = campaign.responses || 0;
   const responseRate = totalContacts > 0 ? Math.round((responses / totalContacts) * 100) : 0;
-  
+
   // Calculate budget/spent for cash rewards
   let budget = 0;
   let spent = 0;
@@ -78,9 +78,9 @@ export default function CampaignDetailsPage() {
     if (!dateString) return "N/A";
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString("en-US", { 
-        year: "numeric", 
-        month: "long", 
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit"
@@ -164,12 +164,12 @@ export default function CampaignDetailsPage() {
       if (response.ok) {
         // Update campaign in store
         updateCampaign(campaignId, updates);
-        
+
         // Close edit mode
         setIsEditingTitle(false);
         setIsEditingDescription(false);
         setIsEditingSMS(false);
-        
+
         alert("Campaign updated successfully!");
       } else {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
@@ -247,7 +247,7 @@ export default function CampaignDetailsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div 
+        <div
           onClick={() => setShowContactsModal(true)}
           className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 cursor-pointer hover:shadow-md transition-all duration-200 hover:border-blue-300 dark:hover:border-blue-600"
         >
@@ -433,6 +433,21 @@ export default function CampaignDetailsPage() {
                 </p>
               </div>
             )}
+            {campaign.image && (
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Campaign Image</p>
+                <div className="relative w-full max-w-sm overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <img
+                    src={campaign.image}
+                    alt="Campaign"
+                    className="w-full h-auto object-cover max-h-64"
+                  />
+                  <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded font-mono">
+                    Variable: {"{image}"}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Reward Information */}
@@ -550,9 +565,9 @@ export default function CampaignDetailsPage() {
       </div>
 
       {/* Contacts Modal */}
-      <Modal 
-        isOpen={showContactsModal} 
-        onClose={() => setShowContactsModal(false)} 
+      <Modal
+        isOpen={showContactsModal}
+        onClose={() => setShowContactsModal(false)}
         className="max-w-4xl max-h-[90vh] overflow-y-auto"
       >
         <div className="p-6">
@@ -583,8 +598,8 @@ export default function CampaignDetailsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {campaignCustomers.map((customer, index) => (
-                    <tr 
-                      key={customer._id || customer.id || index} 
+                    <tr
+                      key={customer._id || customer.id || index}
                       className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
