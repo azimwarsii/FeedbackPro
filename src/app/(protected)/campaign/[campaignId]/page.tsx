@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useSession, signIn } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useCampaignStore } from "@/store/useCampaignStore";
 import { SessionUser } from "@/types/session";
 import { ArrowLeft, Users, DollarSign, Tag, Mail, FileText, Gift, BarChart3, Clock, Phone, Edit2, Save, X, Copy, ExternalLink } from "lucide-react";
@@ -13,7 +13,7 @@ import CampaignResponsesModal from "@/components/campaigns/CampaignResponsesModa
 export default function CampaignDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  useSession();
+  const { data: session } = useSession();
   const campaignId = params.campaignId as string;
   const campaigns = useCampaignStore((state) => state.campaigns);
   const updateCampaign = useCampaignStore((state) => state.updateCampaign);
@@ -166,7 +166,6 @@ export default function CampaignDetailsPage() {
         updateCampaign(campaignId, updates);
 
         // Close edit mode
-        // handleVerifyCode removed as it was unused due to auto-verification flow
         setIsEditingTitle(false);
         setIsEditingDescription(false);
         setIsEditingSMS(false);
@@ -178,7 +177,6 @@ export default function CampaignDetailsPage() {
       }
     } catch (error) {
       console.error("Error updating campaign:", error);
-      // handleSignIn removed as it was unused
       alert("An error occurred while updating the campaign. Please try again.");
     }
   };

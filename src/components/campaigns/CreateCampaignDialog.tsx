@@ -10,7 +10,6 @@ import { useSurveysStore } from "@/store/useSurveysStore";
 import { useCampaignStore } from "@/store/useCampaignStore";
 import { useCustomerStore } from "@/store/useCustomerStore";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { SessionUser } from "@/types/session";
 import * as XLSX from "xlsx";
 
@@ -35,7 +34,6 @@ export function CreateCampaignDialog() {
   const storeCustomers = useCustomerStore((state) => state.customers);
   const { data: session } = useSession();
   const userId = (session?.user as SessionUser)?.id;
-  const router = useRouter();
 
   const showMessage = (type: "success" | "error" | "info", title: string, message: string) => {
     setMessageModal({ isOpen: true, type, title, message });

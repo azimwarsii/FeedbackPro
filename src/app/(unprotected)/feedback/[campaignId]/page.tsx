@@ -2,20 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import {
   Loader2,
-  Shield,
   CheckCircle,
-  XCircle,
   AlertCircle,
   Star,
   FileText,
   Gift
 } from "lucide-react";
 import Button from "@/components/ui/button/Button";
-import { useCampaignStore } from "@/store/useCampaignStore";
-import { useSurveysStore } from "@/store/useSurveysStore";
+
 
 interface QuestionLogic {
   id?: string; // Logic rule ID
@@ -73,7 +70,7 @@ export default function FeedbackPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const campaignId = params.campaignId as string;
-  const { data: session, status } = useSession();
+  useSession();
 
   const [loading, setLoading] = useState(true);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -84,12 +81,10 @@ export default function FeedbackPage() {
   const [error, setError] = useState<string | null>(null);
   const [alreadyFilled, setAlreadyFilled] = useState(false);
   const [formData, setFormData] = useState<Record<string, string | number | string[] | null>>({});
-  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [hiddenQuestions, setHiddenQuestions] = useState<Set<string>>(new Set());
-  const [externalSurveyCode, setExternalSurveyCode] = useState("");
   const [codeVerified, setCodeVerified] = useState(false);
 
   // New state for mobile verification
@@ -226,13 +221,7 @@ export default function FeedbackPage() {
         // Check for code in URL params and verify
         const codeFromUrl = searchParams.get('code');
         if (codeFromUrl && campaignData.code && codeFromUrl.toUpperCase() === campaignData.code.toUpperCase()) {
-          setExternalSurveyCode(codeFromUrl);
           setCodeVerified(true);
-          // If code is verified, showMobileScreen logic will pick this up automatically 
-          // (isExternal && !alreadyFilled && hasCode && codeVerified && !mobileVerified)
-        } else if (codeFromUrl) {
-          // If code exists but invalid, prepopulate but don't verify
-          setExternalSurveyCode(codeFromUrl);
         }
 
       } catch (err) {
@@ -475,9 +464,7 @@ export default function FeedbackPage() {
   }, [botDetected, survey, showSurvey]);
 
 
-  const handleSignIn = () => {
-    signIn("google", { callbackUrl: window.location.href });
-  };
+
 
   const handleInputChange = (questionId: string, value: string | number | string[] | null) => {
     // Update form data immediately
@@ -1262,61 +1249,10 @@ export default function FeedbackPage() {
     );
   }
 
-  // Handle external survey code verification
-  const handleVerifyCode = async () => {
-    if (!campaign?.code) {
-      setError("No code is required for this external survey");
-      return;
-    }
-
-    if (externalSurveyCode.length !== 8) {
-      setError("Please enter a valid 8-character code");
-      return;
-    }
-
-    if (externalSurveyCode.toUpperCase() !== campaign.code) {
-      setError("Invalid code. Please try again.");
-      return;
-    }
-
-    // Code is valid - mark user as completed
-    setCodeVerified(true);
-    setError(null);
-    setSubmitting(true);
-
-    try {
-      // Update customer to increment responses count
-      try {
-        const userId = campaign.user || campaign.userId || "";
-        if (userId) {
-          // Note: In new flow without email, we might not have a responderEmail if it wasn't matched
-          // But here we are in handleVerifyCode, so we don't have mobile yet?
-          // Actually handleVerifyCode is for the 8-char code.
-          // The reward claim is via mobile now. 
-          // So we just verify the code here.
-
-          // We can skip customer update here as we don't have the email/user yet
-          // or we can't link it yet.
-        }
-      } catch (err) {
-        console.error("Error in customer update:", err);
-      }
-
-      setCodeVerified(true);
-      setError(null);
-    } catch (err) {
-      console.error("Error verifying code:", err);
-      setError("An error occurred. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   // Show external survey UI if campaign has external survey and no internal survey
   // But not if already filled (that will be handled by the alreadyFilled check above)
-  // And not if mobile verification is needed (handled by showMobileScreen above)
   const isExternalOnly = campaign && !campaign.survey && campaign.externalSurveyLink;
-  if (isExternalOnly && !botDetected && !alreadyFilled && !showMobileScreen) {
+  if (isExternalOnly && !botDetected && !alreadyFilled && !showMobileInput && !showMobileInput && !showMobileScreen) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 py-6 sm:py-8 md:py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">
@@ -1375,8 +1311,6 @@ export default function FeedbackPage() {
                 </a>
               </div>
             </div>
-
-
 
             {error && (
               <div className="mt-4 p-4 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
@@ -1542,11 +1476,10 @@ export default function FeedbackPage() {
                         e.preventDefault();
                         handleSubmitInit(e as unknown as React.FormEvent);
                       }}
-                      disabled={!canProceed() || submitting}
+                      disabled={!canProceed()}
                       className="w-full sm:w-auto sm:min-w-[140px] inline-flex items-center justify-center font-medium gap-2 rounded-lg transition px-5 py-3.5 text-sm bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600 disabled:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {submitting ? "Submitting..." : "Submit Survey"}
+                      Submit Survey
                     </button>
                   )}
                 </div>
