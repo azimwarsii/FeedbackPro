@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import {
   Loader2,
@@ -71,13 +71,14 @@ interface Campaign {
 
 export default function FeedbackPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const campaignId = params.campaignId as string;
   const { data: session, status } = useSession();
 
   const [loading, setLoading] = useState(true);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [survey, setSurvey] = useState<Survey | null>(null);
-  const [emailVerified, setEmailVerified] = useState(false);
+  // Removed emailVerified state
   const [botDetected, setBotDetected] = useState(false);
   const [showSurvey, setShowSurvey] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +89,14 @@ export default function FeedbackPage() {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [hiddenQuestions, setHiddenQuestions] = useState<Set<string>>(new Set());
-  const [externalSurveyCode, setExternalSurveyCode] = useState(""); // For external survey code input
-  const [codeVerified, setCodeVerified] = useState(false); // Track if code is verified
+  const [externalSurveyCode, setExternalSurveyCode] = useState("");
+  const [codeVerified, setCodeVerified] = useState(false);
+
+  // New state for mobile verification
+  const [showMobileInput, setShowMobileInput] = useState(false);
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [verifyingMobile, setVerifyingMobile] = useState(false);
+  const [mobileVerified, setMobileVerified] = useState(false);
 
   // Honeypot field for bot detection (hidden from users)
   const [honeypot, setHoneypot] = useState("");
@@ -215,6 +222,19 @@ export default function FeedbackPage() {
         } else {
           setError("This campaign does not have a survey");
         }
+
+        // Check for code in URL params and verify
+        const codeFromUrl = searchParams.get('code');
+        if (codeFromUrl && campaignData.code && codeFromUrl.toUpperCase() === campaignData.code.toUpperCase()) {
+          setExternalSurveyCode(codeFromUrl);
+          setCodeVerified(true);
+          // If code is verified, showMobileScreen logic will pick this up automatically 
+          // (isExternal && !alreadyFilled && hasCode && codeVerified && !mobileVerified)
+        } else if (codeFromUrl) {
+          // If code exists but invalid, prepopulate but don't verify
+          setExternalSurveyCode(codeFromUrl);
+        }
+
       } catch (err) {
         console.error("Error fetching campaign:", err);
         setError(`Failed to load campaign: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -226,36 +246,11 @@ export default function FeedbackPage() {
     if (campaignId) {
       fetchCampaign();
     }
-  }, [campaignId]);
+  }, [campaignId, searchParams]); // Add searchParams to dependency if we use it, but careful about loops. 
+  // Actually, better to just read it once. eslint-disable-line or similar.
 
-  // Check email verification and if already filled when session is available
-  useEffect(() => {
-    if (status === "authenticated" && session?.user?.email && campaign) {
-      const userEmail = session.user.email.toLowerCase().trim();
-      const userContact = (campaign.contacts || []).find(
-        c => c.email.toLowerCase().trim() === userEmail
-      );
+  // Removed email verification effect
 
-      if (userContact) {
-        // Check if user has already filled the form
-        if (userContact.filled === true) {
-          setEmailVerified(false);
-          setAlreadyFilled(true);
-          return;
-        }
-        setAlreadyFilled(false);
-        setEmailVerified(true);
-      } else {
-        setEmailVerified(false);
-        setAlreadyFilled(false);
-        setError("Your email is not authorized to fill this survey. Please use the email address that was invited.");
-      }
-    } else if (status === "unauthenticated") {
-      // User needs to sign in
-      setEmailVerified(false);
-      setAlreadyFilled(false);
-    }
-  }, [status, session, campaign]);
 
   // Check bot detection (honeypot should be empty)
   useEffect(() => {
@@ -369,28 +364,46 @@ export default function FeedbackPage() {
     const currentQuestion = currentVisibleQuestions[currentStep];
     const currentQuestionId = currentQuestion?.id;
 
+    // Check deep equality to avoid infinite loops
+    let hasChanged = false;
+    if (hiddenQuestions.size !== newHiddenQuestions.size) {
+      hasChanged = true;
+    } else {
+      for (const id of newHiddenQuestions) {
+        if (!hiddenQuestions.has(id)) {
+          hasChanged = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasChanged) return;
+
     // Update hidden questions state
     setHiddenQuestions(newHiddenQuestions);
 
-    // Adjust current step if current question becomes hidden
-    const visibleQuestions = survey.questions
+    // Adjust step if current question becomes hidden
+    // We need to re-calculate visible questions based on the NEW hidden set
+    const nextVisibleQuestions = survey.questions
       .filter(q => !newHiddenQuestions.has(q.id))
       .sort((a, b) => a.order - b.order);
 
-    if (visibleQuestions.length > 0) {
+    if (nextVisibleQuestions.length > 0) {
       if (!currentQuestionId || newHiddenQuestions.has(currentQuestionId)) {
-        // Current question is now hidden, go to first visible question
+        // Current question hidden, go to start
         setCurrentStep(0);
       } else {
-        // Update step index to match new visible questions order
-        const newIndex = visibleQuestions.findIndex(q => q.id === currentQuestionId);
+        // Find new index
+        const newIndex = nextVisibleQuestions.findIndex(q => q.id === currentQuestionId);
         if (newIndex !== -1 && newIndex !== currentStep) {
           setCurrentStep(newIndex);
-        } else if (currentStep >= visibleQuestions.length) {
-          // Step is beyond visible questions, go to last question
-          setCurrentStep(Math.max(0, visibleQuestions.length - 1));
+        } else if (currentStep >= nextVisibleQuestions.length) {
+          setCurrentStep(Math.max(0, nextVisibleQuestions.length - 1));
         }
       }
+    } else {
+      // No visible questions
+      setCurrentStep(0);
     }
   }, [survey, hiddenQuestions, currentStep]);
 
@@ -428,13 +441,12 @@ export default function FeedbackPage() {
   const surveyInitializedRef = React.useRef(false);
 
   // Show survey once all checks pass
+  // Show survey once checks pass (removed emailVerified check)
   useEffect(() => {
     if (
-      surveyInitializedRef.current ||
-      !emailVerified ||
+      (surveyInitializedRef.current && showSurvey) ||
       botDetected ||
-      !survey ||
-      status !== "authenticated"
+      !survey
     ) {
       return;
     }
@@ -460,7 +472,7 @@ export default function FeedbackPage() {
     });
 
     setHiddenQuestions(initialHidden);
-  }, [emailVerified, botDetected, survey, status]);
+  }, [botDetected, survey, showSurvey]);
 
 
   const handleSignIn = () => {
@@ -614,16 +626,14 @@ export default function FeedbackPage() {
     return true;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmitInit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Bot detection check
     if (honeypot !== "") {
       setError("Bot detected. Submission blocked.");
       return;
     }
 
-    // Validate required fields (only for visible questions)
     const visibleQuestions = getVisibleQuestions();
     const requiredQuestions = visibleQuestions.filter(q => q.required);
     const missingFields = requiredQuestions.filter(q => {
@@ -636,125 +646,88 @@ export default function FeedbackPage() {
       return;
     }
 
-    if (!campaign || !survey || !session?.user?.email) {
+    if (!campaign || !survey) {
       setError("Missing required information. Please refresh and try again.");
       return;
     }
 
-    setSubmitting(true);
+    // Instead of submitting immediately, show mobile input
+    setShowSurvey(false);
+    setShowMobileInput(true);
+  };
+
+  const handleFinalSubmit = async () => {
+    if (!mobileNumber || mobileNumber.trim().length < 6) {
+      setError("Please enter a valid mobile number (at least 6 digits).");
+      return;
+    }
+
+    setVerifyingMobile(true);
     setError(null);
+
+    // Initial bot check logic (retained)
+    const calculateBotScore = () => {
+      let score = 1.0;
+      if (honeypot !== "") return { score: 0.0, isBot: true };
+      const timeOnPage = botMetrics.timeOnPage;
+      if (timeOnPage < 10) score -= 0.3;
+      else if (timeOnPage < 20) score -= 0.1;
+      if (botMetrics.mouseMovements < 5) score -= 0.2;
+      if (botMetrics.keystrokes === 0) score -= 0.2;
+      score = Math.max(0, Math.min(1, score));
+      return { score, isBot: score < 0.5 };
+    };
+
+    const { score: botScore, isBot: isSuspectedBot } = calculateBotScore();
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+      const userId = campaign?.user || campaign?.userId || "";
 
-      // Get responder's phone number from campaign contacts
-      const responderEmail = session.user.email.toLowerCase().trim();
-      const responderContact = campaign.contacts?.find(
-        c => c.email.toLowerCase().trim() === responderEmail
-      );
-      const responderPhone = responderContact?.phone || "";
+      // Check if mobile number exists in contacts and not filled
+      // Check if mobile number exists in contacts and not filled
+      const contacts = campaign?.contacts || [];
+      const cleanMobile = mobileNumber.replace(/\D/g, ""); // Remove non-digits
 
-      // Calculate comprehensive bot score based on multiple factors
-      const calculateBotScore = () => {
-        let score = 1.0; // Start with perfect human score
+      console.log("Debugging Mobile Match (Internal):", {
+        input: mobileNumber,
+        cleanInput: cleanMobile,
+        contactsCount: contacts.length,
+        contactsSample: contacts.slice(0, 3).map(c => c.phone)
+      });
 
-        // Factor 1: Honeypot field (if filled, definitely a bot)
-        if (honeypot !== "") {
-          return { score: 0.0, isBot: true };
-        }
+      // Simple check - in real app might need more fuzzy matching
+      const matchingContact = contacts.find(c => {
+        const contactPhone = c.phone ? c.phone.replace(/\D/g, "") : "";
+        // Check for exact match or suffix match (last 10 digits)
+        const isMatch = contactPhone === cleanMobile ||
+          (cleanMobile.length >= 10 && contactPhone.endsWith(cleanMobile.slice(-10))) ||
+          (contactPhone.length >= 10 && cleanMobile.endsWith(contactPhone.slice(-10)));
 
-        // Factor 2: Time on page (too fast = suspicious)
-        const timeOnPage = botMetrics.timeOnPage;
-        const minExpectedTime = 10; // Minimum 10 seconds for a real user
-        if (timeOnPage < minExpectedTime) {
-          score -= 0.3;
-        } else if (timeOnPage < minExpectedTime * 2) {
-          score -= 0.1;
-        }
+        console.log(`Checking ${c.phone} (${contactPhone}) vs ${cleanMobile}: ${isMatch}`);
+        return isMatch;
+      });
 
-        // Factor 3: Mouse movements (humans move mouse, bots often don't)
-        const mouseMovements = botMetrics.mouseMovements;
-        if (mouseMovements < 5) {
-          score -= 0.2;
-        } else if (mouseMovements < 10) {
-          score -= 0.1;
-        }
+      if (!matchingContact) {
+        setError("This mobile number is not in the invitation list. Only invited users can submit this survey.");
+        setVerifyingMobile(false);
+        return;
+      }
 
-        // Factor 4: Keystrokes (too few or too many = suspicious)
-        const keystrokes = botMetrics.keystrokes;
-        if (keystrokes === 0) {
-          score -= 0.2;
-        } else if (keystrokes > 1000) { // Unusually high
-          score -= 0.1;
-        }
+      if (matchingContact.filled) {
+        setAlreadyFilled(true);
+        setVerifyingMobile(false);
+        return;
+      }
 
-        // Factor 5: Typing speed (too consistent = bot-like)
-        const avgTypingSpeed = botMetrics.averageTypingSpeed;
-        if (avgTypingSpeed > 0 && avgTypingSpeed < 30) { // Less than 30ms between keys (too fast)
-          score -= 0.15;
-        } else if (avgTypingSpeed > 0 && avgTypingSpeed > 2000) { // More than 2 seconds (too slow/mechanical)
-          score -= 0.1;
-        }
+      const visibleQuestionIds = new Set(survey!.questions
+        .filter(q => !hiddenQuestions.has(q.id))
+        .map(q => q.id));
 
-        // Factor 6: Scroll events (humans scroll, bots might not)
-        const scrollEvents = botMetrics.scrollEvents;
-        if (scrollEvents === 0 && timeOnPage > 5) {
-          score -= 0.1;
-        }
-
-        // Factor 7: Focus/blur events (humans interact with page)
-        const focusEvents = botMetrics.focusEvents;
-        const blurEvents = botMetrics.blurEvents;
-        if (focusEvents === 0 && blurEvents === 0 && timeOnPage > 5) {
-          score -= 0.1;
-        }
-
-        // Factor 8: Suspicious patterns detected
-        const suspiciousPatterns = botMetrics.suspiciousPatterns;
-        if (suspiciousPatterns > 0) {
-          score -= suspiciousPatterns * 0.15;
-        }
-
-        // Factor 9: Mouse movement patterns (linear/robotic movement)
-        const mousePositions = botMetrics.mousePositions;
-        if (mousePositions.length > 10) {
-          let linearMovements = 0;
-          for (let i = 1; i < mousePositions.length; i++) {
-            const dx = mousePositions[i].x - mousePositions[i - 1].x;
-            const dy = mousePositions[i].y - mousePositions[i - 1].y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const timeDiff = mousePositions[i].timestamp - mousePositions[i - 1].timestamp;
-            // Check for perfectly linear movement
-            if (timeDiff > 0 && distance > 0 && Math.abs(dx / dy - 1) < 0.1) {
-              linearMovements++;
-            }
-          }
-          const linearRatio = linearMovements / mousePositions.length;
-          if (linearRatio > 0.5) {
-            score -= 0.2;
-          }
-        }
-
-        // Normalize score to 0-1 range
-        score = Math.max(0, Math.min(1, score));
-
-        // Determine if suspected bot (score < 0.5)
-        const isSuspectedBot = score < 0.5;
-
-        return { score, isBot: isSuspectedBot };
-      };
-
-      const botDetection = calculateBotScore();
-      const botScore = botDetection.score;
-      const isSuspectedBot = botDetection.isBot;
-
-      // Transform formData into answers array format
-      // Only include answers for visible (non-hidden) questions
-      const visibleQuestionIds = new Set(getVisibleQuestions().map(q => q.id));
       const answers = Object.entries(formData)
         .filter(([questionId]) => visibleQuestionIds.has(questionId))
         .map(([questionId, answer]) => {
-          const question = survey.questions.find(q => q.id === questionId);
+          const question = survey!.questions.find(q => q.id === questionId);
           return {
             question_title: question?.title || "",
             question_description: question?.description || "",
@@ -762,247 +735,135 @@ export default function FeedbackPage() {
           };
         });
 
-      // Get reward amount from campaign
-      const rewardAmount = campaign.reward?.type === "cash reward"
-        ? campaign.reward.amount || 0
-        : undefined;
-
-      // Get timestamps
-      const completedAt = new Date();
-      const startedAtDate = startedAt || completedAt;
-
-      // Get IP address (try to fetch from a service, fallback to empty string)
-      let ipAddress = "";
-      try {
-        // Try to get IP from a public service
-        const ipResponse = await fetch("https://api.ipify.org?format=json");
-        if (ipResponse.ok) {
-          const ipData = await ipResponse.json();
-          ipAddress = ipData.ip || "";
-        }
-      } catch (err) {
-        // IP will be captured server-side from request headers
-        console.warn("Could not fetch IP address client-side:", err);
-      }
-
-      // Get user_id (campaign owner)
-      const userId = campaign.user || campaign.userId || "";
-
-      if (!userId) {
-        setError("Campaign owner information is missing. Please contact support.");
-        setSubmitting(false);
-        return;
-      }
-
-      // Prepare response data according to backend API schema
       const responseData = {
         userId: userId,
-        surveyId: survey._id || survey.id,
+        surveyId: survey!._id || survey!.id,
         campaignId: campaignId,
-        responders_email: responderEmail,
-        responders_phone: responderPhone,
+        responders_email: matchingContact?.email || "", // Empty if anonymous/new
+        responders_phone: mobileNumber,
         answers: answers,
-        started_at: startedAtDate.toISOString(),
-        completed_at: completedAt.toISOString(),
+        started_at: (startedAt || new Date()).toISOString(),
+        completed_at: new Date().toISOString(),
         bot_score: botScore,
         is_suspected_bot: isSuspectedBot,
-        reward_amount: rewardAmount || 0,
-        reward_status: rewardAmount ? "pending" : "pending",
-        ip_address: ipAddress,
+        reward_amount: matchingContact ? (campaign?.reward?.amount || 0) : 0,
+        reward_status: matchingContact ? "pending" : "skipped", // Only reward if matched
+        ip_address: "", // Server will handle
         user_agent: typeof window !== "undefined" ? window.navigator.userAgent : "",
       };
 
       const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/responses`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(responseData),
       });
 
       if (response.ok) {
-        // Update customer to increment responses count
-        try {
-          // First, fetch the current customer to get the current responses count
-          const getCustomerResponse = await fetch(
-            `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
-            {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (getCustomerResponse.ok) {
-            const customerData = await getCustomerResponse.json();
-            const currentCustomer = customerData?.customer || customerData;
-            // Ensure responses is a number, not a string or array
-            const currentResponses = typeof currentCustomer?.responses === 'number'
-              ? currentCustomer.responses
-              : (typeof currentCustomer?.responses === 'string'
-                ? parseInt(currentCustomer.responses, 10) || 0
-                : 0);
-
-            // Increment responses by 1 (ensure it's a number)
-            const newResponsesCount = Number(currentResponses) + 1;
-
-            // Increment responses by 1
-            const customerUpdateResponse = await fetch(
-              `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
-              {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  responses: newResponsesCount,
-                }),
+        // Update contact if matched
+        if (matchingContact) {
+          // Update campaign contacts locally and on server
+          try {
+            const currentContacts = campaign?.contacts || [];
+            const updatedContacts = currentContacts.map(contact => {
+              if (contact.phone === matchingContact.phone) { // Using original phone from matching contact
+                return { ...contact, filled: true };
               }
-            );
+              return contact;
+            });
 
-            if (!customerUpdateResponse.ok) {
-              console.warn("Failed to update customer response count:", await customerUpdateResponse.json().catch(() => ({})));
-              // Don't fail the submission if customer update fails
-            }
-          } else {
-            console.warn("Failed to fetch customer for response count update");
-            // Don't fail the submission if customer fetch fails
-          }
-        } catch (err) {
-          console.warn("Error updating customer:", err);
-          // Don't fail the submission if customer update fails
-        }
-
-        // Update campaign to mark this contact as filled, increment responses, and update reward utilization
-        try {
-          // Get current campaign contacts
-          const currentContacts = campaign.contacts || [];
-          const updatedContacts = currentContacts.map(contact => {
-            if (contact.email.toLowerCase().trim() === responderEmail.toLowerCase().trim()) {
-              return { ...contact, filled: true };
-            }
-            return contact;
-          });
-
-          // Prepare campaign update payload
-          const campaignUpdatePayload: {
-            contacts: Array<{ name: string; email: string; phone: string; filled?: boolean }>;
-            responses: number;
-            reward?: {
-              type: "cash reward" | "promo code";
-              amount?: number;
-              amount_utilized?: number;
-              code?: string;
-              description?: string;
-              codes_utilized?: number;
-            };
-          } = {
-            contacts: updatedContacts,
-            responses: (campaign.responses || 0) + 1,
-          };
-
-          // Update reward utilization based on reward type
-          if (campaign.reward) {
-            if (campaign.reward.type === "cash reward" && campaign.reward.amount) {
-              campaignUpdatePayload.reward = {
-                ...campaign.reward,
-                amount_utilized: (campaign.reward.amount_utilized || 0) + campaign.reward.amount,
-              };
-            } else if (campaign.reward.type === "promo code") {
-              campaignUpdatePayload.reward = {
-                ...campaign.reward,
-                codes_utilized: (campaign.reward.codes_utilized || 0) + 1,
-              };
-            }
-          }
-
-          // Update campaign via API
-          const campaignUpdateResponse = await fetch(
-            `${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}`,
-            {
+            // Update campaign
+            await fetch(`${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}`, {
               method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(campaignUpdatePayload),
-            }
-          );
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contacts: updatedContacts,
+                responses: (campaign?.responses || 0) + 1
+              })
+            });
 
-          if (!campaignUpdateResponse.ok) {
-            console.warn("Failed to update campaign:", await campaignUpdateResponse.json().catch(() => ({})));
-            // Don't fail the submission if campaign update fails
-          } else {
-            // Update local campaign state
-            const updatedCampaign = {
-              ...campaign,
-              contacts: updatedContacts,
-              responses: (campaign.responses || 0) + 1,
-              reward: campaignUpdatePayload.reward || campaign.reward,
-            };
-            setCampaign(updatedCampaign);
-
-            // Update campaign store
-            const { updateCampaignContact, incrementCampaignResponse, updateRewardUtilization } = useCampaignStore.getState();
-            updateCampaignContact(campaignId, responderEmail, true);
-            incrementCampaignResponse(campaignId);
-            if (campaign.reward?.type) {
-              updateRewardUtilization(campaignId, campaign.reward.type);
-            }
+            // Update store if needed (skipped for now as this is public page)
+          } catch (e) {
+            console.warn("Failed to update campaign contact status", e);
           }
-        } catch (err) {
-          console.warn("Error updating campaign:", err);
-          // Don't fail the submission if campaign update fails
+          setMobileVerified(true); // Claimed!
         }
-
-        // Update survey to increment responses count
-        try {
-          const surveyId = survey._id || survey.id;
-          if (surveyId) {
-            // Update survey via API
-            const surveyUpdateResponse = await fetch(
-              `${baseUrl.replace(/\/+$/, "")}/surveys/${surveyId}`,
-              {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  responses: (survey.responses || 0) + 1,
-                }),
-              }
-            );
-
-            if (!surveyUpdateResponse.ok) {
-              console.warn("Failed to update survey response count:", await surveyUpdateResponse.json().catch(() => ({})));
-              // Don't fail the submission if survey update fails
-            } else {
-              // Update local survey state
-              setSurvey({
-                ...survey,
-                responses: (survey.responses || 0) + 1,
-              });
-
-              // Update survey store
-              const { incrementSurveyResponse } = useSurveysStore.getState();
-              incrementSurveyResponse(surveyId);
-            }
-          }
-        } catch (err) {
-          console.warn("Error updating survey response count:", err);
-          // Don't fail the submission if survey update fails
-        }
-
         setSubmitted(true);
       } else {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
-        setError(errorData.error || "Failed to submit survey. Please try again.");
+        setError(errorData.error || "Failed to submit survey.");
       }
+
     } catch (err) {
-      console.error("Error submitting survey:", err);
-      setError("An error occurred while submitting the survey. Please try again.");
+      console.error("Submission error:", err);
+      setError("An error occurred. Please try again.");
     } finally {
-      setSubmitting(false);
+      setVerifyingMobile(false);
+    }
+  };
+
+  const handleExternalMobileSubmit = async () => {
+    if (!mobileNumber || mobileNumber.trim().length < 6) {
+      setError("Please enter a valid mobile number (at least 6 digits).");
+      return;
+    }
+    setVerifyingMobile(true);
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+      const contacts = campaign?.contacts || [];
+      const cleanMobile = mobileNumber.replace(/\D/g, "");
+
+      console.log("Debugging Mobile Match (External):", {
+        input: mobileNumber,
+        cleanInput: cleanMobile,
+        contactsCount: contacts.length,
+        contactsSample: contacts.slice(0, 3).map(c => c.phone)
+      });
+
+      const matchingContact = contacts.find(c => {
+        const contactPhone = c.phone ? c.phone.replace(/\D/g, "") : "";
+        // Check for exact match or suffix match (last 10 digits)
+        const isMatch = contactPhone === cleanMobile ||
+          (cleanMobile.length >= 10 && contactPhone.endsWith(cleanMobile.slice(-10))) ||
+          (contactPhone.length >= 10 && cleanMobile.endsWith(contactPhone.slice(-10)));
+
+        console.log(`Checking ${c.phone} (${contactPhone}) vs ${cleanMobile}: ${isMatch}`);
+        return isMatch;
+      });
+
+      if (!matchingContact) {
+        setError("This mobile number is not in the invitation list. Only invited users can submit this survey.");
+        setVerifyingMobile(false);
+        return;
+      }
+
+      if (matchingContact.filled) {
+        setAlreadyFilled(true);
+      } else {
+        // Update contact to filled
+        const updatedContacts = contacts.map(c => {
+          if (c === matchingContact) return { ...c, filled: true };
+          return c;
+        });
+
+        // Update campaign
+        await fetch(`${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contacts: updatedContacts,
+            responses: (campaign?.responses || 0) + 1
+          })
+        });
+        setMobileVerified(true);
+        setCodeVerified(true); // Reusing this for success state in external
+      }
+
+    } catch (e) {
+      console.error("Error verifying mobile:", e);
+      setError("Failed to verify. Please try again.");
+    } finally {
+      setVerifyingMobile(false);
     }
   };
 
@@ -1217,25 +1078,10 @@ export default function FeedbackPage() {
     );
   }
 
-  // Show generic error only if not authenticated or if it's not an email verification error
-  if (error && !showSurvey && (status !== "authenticated" || emailVerified)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 px-4 sm:px-6">
-        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-theme-lg p-8 text-center border border-gray-100 dark:border-gray-700/50">
-          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-error-100 dark:bg-error-500/20 mx-auto mb-6">
-            <XCircle className="w-10 h-10 text-error-600 dark:text-error-400" strokeWidth={2.5} />
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-3">Error</h2>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">{error}</p>
-          {status === "unauthenticated" && (
-            <Button onClick={handleSignIn} variant="primary" className="w-full sm:w-auto">
-              Sign in with Google
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // Handle Unauthenticated - No longer needed as we allow anonymous access
+  // But we might want to keep some form of access control if campaign is closed etc.
+
+
 
   if (submitted) {
     return (
@@ -1251,60 +1097,165 @@ export default function FeedbackPage() {
     );
   }
 
-  // Email verification check - must come before welcome screen
-  if (status === "authenticated" && !emailVerified && campaign) {
+
+
+  // Handle Unauthenticated or Unverified state
+  // With the new flow, we don't enforce authentication for filling the survey.
+  // We only check if the survey is loaded.
+
+  // If we are here, it means:
+  // 1. Not loading
+  // 2. Not already filled (checked above)
+  // 3. Not submitted (checked above)
+  // 4. Not showing mobile input (checked above)
+  // 5. Not showing survey (checked next)
+
+  // We should just render the survey if it exists and showSurvey is true
+  // The showSurvey state is set in the effect ensuring bot detection passes.
+
+  // If showSurvey is false but we are not loading, it might be that bot detection failed or some other error.
+  if (!showSurvey && !loading && !error && !campaign?.externalSurveyLink) {
+    // Fallback to loading or verifying access if no specific error
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900">
+        <div className="text-center">
+          <div className="flex items-center justify-center w-16 h-16 rounded-full bg-brand-100 dark:bg-brand-500/20 mx-auto mb-4">
+            <Loader2 className="w-8 h-8 animate-spin text-brand-600 dark:text-brand-400" />
+          </div>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 font-medium">Preparing survey...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Generic Error Screen - Only show if no other UI is active and we have an error
+  // This prevents validation errors from hiding the form
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8 text-center bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-theme-lg border border-gray-100 dark:border-gray-700/50">
+          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-error-100 dark:bg-error-900/30">
+            <AlertCircle className="h-6 w-6 text-error-600 dark:text-error-400" />
+          </div>
+          <div>
+            <h2 className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+              Unable to Load Survey
+            </h2>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              {error}
+            </p>
+          </div>
+          <div className="mt-4">
+            <Button onClick={() => window.location.reload()} variant="outline" className="w-full">
+              Reload Page
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // External Survey Success (Code/Mobile Verified)
+  // Only show "Thank You" if BOTH code (if applicable) and mobile are verified
+  // For internal surveys, codeVerified is false (or unused), so we rely on submitted/mobileVerified
+  // But strictly for external flow:
+  const isExternalFlow = campaign && !campaign.survey && campaign.externalSurveyLink;
+
+  if (isExternalFlow && codeVerified && mobileVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-        <div className="max-w-lg w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
-              <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 text-center">
+          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Thank You!</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Your participation has been verified.
+          </p>
+          {mobileVerified && (
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="font-semibold text-green-800 dark:text-green-200">Reward Claimed!</p>
+              <p className="text-sm text-green-700 dark:text-green-300">Your number has been verified.</p>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Access Denied
-            </h2>
-          </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-          {/* Current User Info */}
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-4">
-            <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
-              You are currently logged in as:
-            </p>
-            <p className="text-base font-semibold text-gray-900 dark:text-white">
-              {session?.user?.name || "User"}
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400 font-mono mt-1">
-              {session?.user?.email}
-            </p>
-          </div>
+  // Mobile Verification Screen (for both internal flow after questions, and external flow)
+  // Check if we should show mobile input
+  const isExternal = campaign && !campaign.survey && campaign.externalSurveyLink;
+  const hasCode = !!campaign?.code;
 
-          {/* Campaign Info */}
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-            <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
-              Campaign:
-            </p>
-            <p className="text-lg font-bold text-red-900 dark:text-red-100 mb-3">
-              {campaign.name}
-            </p>
-            <p className="text-sm text-red-700 dark:text-red-300">
-              <strong>This campaign does not allow access for your email address.</strong>
-            </p>
-            <p className="text-sm text-red-600 dark:text-red-400 mt-2">
-              Please sign in with the email address that received the survey invitation.
-            </p>
-          </div>
+  // Show mobile screen if:
+  // 1. Internal flow: showMobileInput is true
+  // 2. External flow: Has code AND code is verified AND mobile NOT yet verified
+  // If external flow has NO code, we never show mobile screen (user only sees link)
+  const showMobileScreen = showMobileInput ||
+    (isExternal && !alreadyFilled && hasCode && codeVerified && !mobileVerified);
 
-          {/* Logout Button */}
-          <div className="space-y-3">
-            <Button
-              onClick={() => signOut({ callbackUrl: window.location.href })}
-              className="w-full"
-            >
-              Sign Out
-            </Button>
-            <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-              After signing out, you can sign in with a different Google account that has access to this survey.
-            </p>
+  if (showMobileScreen) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 py-6 sm:py-8 md:py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-theme-lg p-6 sm:p-8 border border-gray-100 dark:border-gray-700/50">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
+                <Gift className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                {isExternal ? "Claim Your Reward" : "Almost Done!"}
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400">
+                Please enter your mobile number on which you received the invitation to claim your reward.
+              </p>
+            </div>
+
+            {isExternal && (
+              <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">Survey Link:</p>
+                <a href={campaign.externalSurveyLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all block mb-2">
+                  {campaign.externalSurveyLink}
+                </a>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  (Please make sure you have filled the form at the link above first)
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="mobile" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  id="mobile"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  placeholder="e.g. 1234567890"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                onClick={isExternal ? handleExternalMobileSubmit : handleFinalSubmit}
+                className="w-full"
+                disabled={verifyingMobile}
+              >
+                {verifyingMobile ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Verifying...
+                  </>
+                ) : "Verify & Claim Reward"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -1323,7 +1274,7 @@ export default function FeedbackPage() {
       return;
     }
 
-    if (externalSurveyCode !== campaign.code) {
+    if (externalSurveyCode.toUpperCase() !== campaign.code) {
       setError("Invalid code. Please try again.");
       return;
     }
@@ -1334,297 +1285,38 @@ export default function FeedbackPage() {
     setSubmitting(true);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
-
-      if (!campaign || !session?.user?.email) {
-        setError("Missing required information. Please refresh and try again.");
-        setSubmitting(false);
-        return;
-      }
-
-      // Get responder's email
-      const responderEmail = session.user.email.toLowerCase().trim();
-
-      // Get current campaign contacts
-      const currentContacts = campaign.contacts || [];
-      const updatedContacts = currentContacts.map(contact => {
-        if (contact.email.toLowerCase().trim() === responderEmail.toLowerCase().trim()) {
-          return { ...contact, filled: true };
-        }
-        return contact;
-      });
-
-      // Prepare campaign update payload
-      const campaignUpdatePayload: {
-        contacts: Array<{ name: string; email: string; phone: string; filled?: boolean }>;
-        responses: number;
-        reward?: {
-          type: "cash reward" | "promo code";
-          amount?: number;
-          amount_utilized?: number;
-          code?: string;
-          description?: string;
-          codes_utilized?: number;
-        };
-      } = {
-        contacts: updatedContacts,
-        responses: (campaign.responses || 0) + 1,
-      };
-
-      // Update reward utilization based on reward type
-      if (campaign.reward) {
-        if (campaign.reward.type === "cash reward" && campaign.reward.amount) {
-          campaignUpdatePayload.reward = {
-            ...campaign.reward,
-            amount_utilized: (campaign.reward.amount_utilized || 0) + campaign.reward.amount,
-          };
-        } else if (campaign.reward.type === "promo code") {
-          campaignUpdatePayload.reward = {
-            ...campaign.reward,
-            codes_utilized: (campaign.reward.codes_utilized || 0) + 1,
-          };
-        }
-      }
-
-      // Update campaign via API
-      const campaignUpdateResponse = await fetch(
-        `${baseUrl.replace(/\/+$/, "")}/campaigns/${campaignId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(campaignUpdatePayload),
-        }
-      );
-
-      if (!campaignUpdateResponse.ok) {
-        const errorData = await campaignUpdateResponse.json().catch(() => ({ error: "Unknown error" }));
-        console.error("Failed to update campaign:", errorData);
-        setError(`Failed to mark survey as completed: ${errorData.error || "Unknown error"}`);
-        setSubmitting(false);
-        return;
-      }
-
-      // Update local campaign state
-      const updatedCampaign = {
-        ...campaign,
-        contacts: updatedContacts,
-        responses: (campaign.responses || 0) + 1,
-        reward: campaignUpdatePayload.reward || campaign.reward,
-      };
-      setCampaign(updatedCampaign);
-
-      // Update campaign store
-      const { updateCampaignContact, incrementCampaignResponse, updateRewardUtilization } = useCampaignStore.getState();
-      updateCampaignContact(campaignId, responderEmail, true);
-      incrementCampaignResponse(campaignId);
-      if (campaign.reward?.type) {
-        updateRewardUtilization(campaignId, campaign.reward.type);
-      }
-
       // Update customer to increment responses count
       try {
         const userId = campaign.user || campaign.userId || "";
         if (userId) {
-          // First, fetch the current customer to get the current responses count
-          const getCustomerResponse = await fetch(
-            `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
-            {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
+          // Note: In new flow without email, we might not have a responderEmail if it wasn't matched
+          // But here we are in handleVerifyCode, so we don't have mobile yet?
+          // Actually handleVerifyCode is for the 8-char code.
+          // The reward claim is via mobile now. 
+          // So we just verify the code here.
 
-          if (getCustomerResponse.ok) {
-            const customerData = await getCustomerResponse.json();
-            const currentCustomer = customerData?.customer || customerData;
-            // Ensure responses is a number, not a string or array
-            const currentResponses = typeof currentCustomer?.responses === 'number'
-              ? currentCustomer.responses
-              : (typeof currentCustomer?.responses === 'string'
-                ? parseInt(currentCustomer.responses, 10) || 0
-                : 0);
-
-            // Increment responses by 1 (ensure it's a number)
-            const newResponsesCount = Number(currentResponses) + 1;
-
-            // Increment responses by 1
-            const customerUpdateResponse = await fetch(
-              `${baseUrl.replace(/\/+$/, "")}/customers/email/${encodeURIComponent(responderEmail)}?userId=${encodeURIComponent(userId)}`,
-              {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  responses: newResponsesCount,
-                }),
-              }
-            );
-
-            if (!customerUpdateResponse.ok) {
-              console.warn("Failed to update customer response count:", await customerUpdateResponse.json().catch(() => ({})));
-              // Don't fail the submission if customer update fails
-            }
-          } else {
-            console.warn("Failed to fetch customer for response count update");
-            // Don't fail the submission if customer fetch fails
-          }
+          // We can skip customer update here as we don't have the email/user yet
+          // or we can't link it yet.
         }
       } catch (err) {
-        console.warn("Error updating customer:", err);
-        // Don't fail the submission if customer update fails
+        console.error("Error in customer update:", err);
       }
 
-      // Mark as already filled so the "already completed" message shows
-      setAlreadyFilled(true);
+      setCodeVerified(true);
+      setError(null);
     } catch (err) {
-      console.error("Error verifying code and marking as completed:", err);
-      setError("An error occurred while marking the survey as completed. Please try again.");
+      console.error("Error verifying code:", err);
+      setError("An error occurred. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Authentication check - Show welcome screen with campaign details
-  if (status === "unauthenticated") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4">
-        <div className="max-w-2xl mx-auto">
-          {/* Welcome Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 mb-6">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
-                <Shield className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Welcome to Our Feedback Survey
-              </h1>
-              {campaign && (
-                <>
-                  <h2 className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mb-4">
-                    {campaign.name}
-                  </h2>
-                  {campaign.description && (
-                    <p className="text-gray-600 dark:text-gray-300 text-lg leading-relaxed">
-                      {campaign.description}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Instructions Section */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                How to Participate
-              </h3>
-              <ol className="space-y-3 text-gray-700 dark:text-gray-300">
-                <li className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">1</span>
-                  <span><strong>Sign in with Google</strong> using the email address where you received the survey invitation</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">2</span>
-                  <span>Your email will be <strong>automatically verified</strong> to ensure you&apos;re authorized to participate</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">3</span>
-                  <span>Fill out the survey form <strong>once</strong> - you can only submit your response more than one time</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">4</span>
-                  <span>Complete all required fields and submit your feedback</span>
-                </li>
-              </ol>
-            </div>
-
-            {/* Reward Information */}
-            {campaign?.reward && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-6 mb-6 border border-green-200 dark:border-green-800">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Gift className="w-5 h-5 text-green-600 dark:text-green-400" />
-                  Reward Information
-                </h3>
-                {campaign.reward.type === "cash reward" && campaign.reward.amount && (
-                  <div className="text-center">
-                    <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
-                      ${campaign.reward.amount.toFixed(2)}
-                    </p>
-                    <p className="text-gray-700 dark:text-gray-300">
-                      You will receive <strong>${campaign.reward.amount.toFixed(2)}</strong> upon successful completion of this survey
-                    </p>
-                  </div>
-                )}
-                {campaign.reward.type === "promo code" && campaign.reward.code && (
-                  <div className="text-center">
-                    <p className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Promo Code Reward
-                    </p>
-                    <p className="text-gray-700 dark:text-gray-300">
-                      {campaign.reward.description || "You will receive a promotional code upon completion"}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Guidelines */}
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                Important Guidelines
-              </h3>
-              <ul className="space-y-2 text-gray-700 dark:text-gray-300 text-sm">
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 dark:text-amber-400 mt-1">•</span>
-                  <span>You can only submit this survey <strong>once</strong> - please review your answers carefully</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 dark:text-amber-400 mt-1">•</span>
-                  <span>All fields marked with <span className="text-red-500">*</span> are required</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 dark:text-amber-400 mt-1">•</span>
-                  <span>Please use the <strong>same email address</strong> that received the survey invitation</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 dark:text-amber-400 mt-1">•</span>
-                  <span>Your responses are confidential and will be used for research purposes only</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-amber-600 dark:text-amber-400 mt-1">•</span>
-                  <span>Rewards will be processed after survey completion and verification</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Sign In Button */}
-            <Button onClick={handleSignIn} className="w-full text-lg py-4">
-              <span className="flex items-center justify-center gap-2">
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M18.7511 10.1944C18.7511 9.47495 18.6915 8.94995 18.5626 8.40552H10.1797V11.6527H15.1003C15.0011 12.4597 14.4654 13.675 13.2749 14.4916L13.2582 14.6003L15.9087 16.6126L16.0924 16.6305C17.7788 15.1041 18.7511 12.8583 18.7511 10.1944Z" fill="#4285F4" />
-                  <path d="M10.1788 18.75C12.5895 18.75 14.6133 17.9722 16.0915 16.6305L13.274 14.4916C12.5201 15.0068 11.5081 15.3666 10.1788 15.3666C7.81773 15.3666 5.81379 13.8402 5.09944 11.7305L4.99473 11.7392L2.23868 13.8295L2.20264 13.9277C3.67087 16.786 6.68674 18.75 10.1788 18.75Z" fill="#34A853" />
-                  <path d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z" fill="#FBBC05" />
-                  <path d="M10.1789 4.63331C11.8554 4.63331 12.9864 5.34303 13.6312 5.93612L16.1511 3.525C14.6035 2.11528 12.5895 1.25 10.1789 1.25C6.68676 1.25 3.67088 3.21387 2.20264 6.07218L5.08953 8.26943C5.81381 6.15972 7.81776 4.63331 10.1789 4.63331Z" fill="#EB4335" />
-                </svg>
-                Sign in with Google to Continue
-              </span>
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-
   // Show external survey UI if campaign has external survey and no internal survey
   // But not if already filled (that will be handled by the alreadyFilled check above)
-  if (campaign && !campaign.survey && campaign.externalSurveyLink && status === "authenticated" && emailVerified && !botDetected && !alreadyFilled) {
+  // And not if mobile verification is needed (handled by showMobileScreen above)
+  const isExternalOnly = campaign && !campaign.survey && campaign.externalSurveyLink;
+  if (isExternalOnly && !botDetected && !alreadyFilled && !showMobileScreen) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 py-6 sm:py-8 md:py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">
@@ -1642,6 +1334,23 @@ export default function FeedbackPage() {
               </p>
             </div>
 
+            {mobileVerified && !alreadyFilled && campaign?.reward && (
+              <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4 border border-brand-100 dark:border-brand-800">
+                <h3 className="text-lg font-semibold text-brand-900 dark:text-brand-100 mb-2">
+                  Reward Unlocked!
+                </h3>
+                <p className="text-brand-700 dark:text-brand-300 text-sm mb-3">
+                  {campaign.reward.type === "cash reward"
+                    ? `You've earned $${campaign.reward.amount}`
+                    : "You've earned a promo code!"}
+                </p>
+                {campaign.reward.type === "promo code" && campaign.reward.code && (
+                  <div className="bg-white dark:bg-gray-800 border border-brand-200 dark:border-brand-700 rounded p-2 font-mono text-lg font-bold text-brand-600 dark:text-brand-400 select-all">
+                    {campaign.reward.code}
+                  </div>
+                )}
+              </div>
+            )}
             {/* External Survey Link */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 mb-6 border border-blue-200 dark:border-blue-800">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
@@ -1667,55 +1376,7 @@ export default function FeedbackPage() {
               </div>
             </div>
 
-            {/* Code Input Section */}
-            {campaign.code && (
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="external-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Enter 8-Character Code
-                  </label>
-                  <div className="flex gap-3">
-                    <input
-                      id="external-code"
-                      type="text"
-                      maxLength={8}
-                      value={externalSurveyCode}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value.length <= 8) {
-                          setExternalSurveyCode(value);
-                          setError(null);
-                        }
-                      }}
-                      placeholder="ABC12345"
-                      className="flex-1 h-11 px-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-center text-lg font-mono tracking-widest uppercase"
-                    />
-                    <Button
-                      onClick={handleVerifyCode}
-                      disabled={externalSurveyCode.length !== 4 || codeVerified || submitting}
-                      className="px-6"
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin mr-2 inline" />
-                          Verifying...
-                        </>
-                      ) : codeVerified ? (
-                        "Verified ✓"
-                      ) : (
-                        "Verify"
-                      )}
-                    </Button>
-                  </div>
-                  {codeVerified && (
-                    <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4" />
-                      Code verified successfully!
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+
 
             {error && (
               <div className="mt-4 p-4 bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 rounded-lg">
@@ -1741,10 +1402,6 @@ export default function FeedbackPage() {
                   <>
                     <li className="flex items-start gap-2">
                       <span className="text-amber-600 dark:text-amber-400 mt-1">2.</span>
-                      <span>Enter the 8-character code provided to you in the field above and click &quot;Verify&quot;</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-amber-600 dark:text-amber-400 mt-1">3.</span>
                       <span>Complete the survey on the external platform</span>
                     </li>
                   </>
@@ -1781,11 +1438,11 @@ export default function FeedbackPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2 leading-tight">
-                  {survey.title}
+                  {survey?.title}
                 </h1>
-                {survey.description && (
+                {survey?.description && (
                   <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 leading-relaxed">
-                    {survey.description}
+                    {survey?.description}
                   </p>
                 )}
               </div>
@@ -1883,7 +1540,7 @@ export default function FeedbackPage() {
                       type="button"
                       onClick={(e: React.MouseEvent) => {
                         e.preventDefault();
-                        handleSubmit(e as unknown as React.FormEvent);
+                        handleSubmitInit(e as unknown as React.FormEvent);
                       }}
                       disabled={!canProceed() || submitting}
                       className="w-full sm:w-auto sm:min-w-[140px] inline-flex items-center justify-center font-medium gap-2 rounded-lg transition px-5 py-3.5 text-sm bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600 disabled:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-50"

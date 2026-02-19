@@ -10,6 +10,7 @@ import { useSurveysStore } from "@/store/useSurveysStore";
 import { useCampaignStore } from "@/store/useCampaignStore";
 import { useCustomerStore } from "@/store/useCustomerStore";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { SessionUser } from "@/types/session";
 import * as XLSX from "xlsx";
 
@@ -34,9 +35,9 @@ export function CreateCampaignDialog() {
   const storeCustomers = useCustomerStore((state) => state.customers);
   const { data: session } = useSession();
   const userId = (session?.user as SessionUser)?.id;
+  const router = useRouter();
 
   const showMessage = (type: "success" | "error" | "info", title: string, message: string) => {
-    setIsOpen(false);
     setMessageModal({ isOpen: true, type, title, message });
   };
 
@@ -599,19 +600,20 @@ export function CreateCampaignDialog() {
           reward: createdCampaign.reward,
           survey: createdCampaign.survey,
           image: createdCampaign.image || campaignData.image,
-          user: createdCampaign.user || userId,
-          createdAt: createdCampaign.createdAt,
-          updatedAt: createdCampaign.updatedAt,
-          responses: 0,
-          status: "active"
+          user: userId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: "Active",
+          responses: 0
         });
       }
 
-      // Reset form first
       setIsOpen(false);
 
-      // Show success message (main modal already closed)
-      showMessage("success", "Campaign Created", "Campaign created successfully!");
+      // Redirect to campaigns list and reload the whole page
+      window.location.href = "/campaign";
+
+      // Reset form
       setCampaignData({
         name: "",
         description: "",
@@ -771,31 +773,7 @@ export function CreateCampaignDialog() {
         <span className="sm:hidden">Create</span>
       </button>
 
-      {/* Message Modal */}
-      <Modal
-        isOpen={messageModal.isOpen}
-        onClose={closeMessage}
-        className="max-w-md"
-      >
-        <div className="p-6">
-          <div className={`flex items-start gap-4 p-4 rounded-lg border ${getMessageColors()}`}>
-            <div className="flex-shrink-0">{getMessageIcon()}</div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {messageModal.title}
-              </h3>
-              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {messageModal.message}
-              </p>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <Button onClick={closeMessage}>
-              OK
-            </Button>
-          </div>
-        </div>
-      </Modal>
+
 
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="p-6">
@@ -987,6 +965,19 @@ export function CreateCampaignDialog() {
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           Enter an 8-character code for this external survey
                         </p>
+                      </div>
+
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-900 dark:text-blue-100">
+                        <div className="flex gap-3">
+                          <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="font-semibold mb-1">External Survey Setup</p>
+                            <p className="text-blue-800 dark:text-blue-200 leading-relaxed">
+                              To ensure users can claim rewards, you must add a <strong>Redirect Link</strong> in your external survey settings.
+                              This link (containing your unique code) will be generated and shown on the <strong>Campaign Details</strong> page after creation.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1937,6 +1928,32 @@ export function CreateCampaignDialog() {
                 </Button>
               )}
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Message Modal */}
+      <Modal
+        isOpen={messageModal.isOpen}
+        onClose={closeMessage}
+        className="max-w-md"
+      >
+        <div className="p-6">
+          <div className={`flex items-start gap-4 p-4 rounded-lg border ${getMessageColors()}`}>
+            <div className="flex-shrink-0">{getMessageIcon()}</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                {messageModal.title}
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                {messageModal.message}
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button onClick={closeMessage}>
+              OK
+            </Button>
           </div>
         </div>
       </Modal>

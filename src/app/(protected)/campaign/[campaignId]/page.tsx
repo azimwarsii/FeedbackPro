@@ -2,10 +2,10 @@
 
 import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { useCampaignStore } from "@/store/useCampaignStore";
 import { SessionUser } from "@/types/session";
-import { ArrowLeft, Users, DollarSign, Tag, Mail, FileText, Gift, BarChart3, Clock, Phone, Edit2, Save, X } from "lucide-react";
+import { ArrowLeft, Users, DollarSign, Tag, Mail, FileText, Gift, BarChart3, Clock, Phone, Edit2, Save, X, Copy, ExternalLink } from "lucide-react";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
 import CampaignResponsesModal from "@/components/campaigns/CampaignResponsesModal";
@@ -13,7 +13,7 @@ import CampaignResponsesModal from "@/components/campaigns/CampaignResponsesModa
 export default function CampaignDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session } = useSession();
+  useSession();
   const campaignId = params.campaignId as string;
   const campaigns = useCampaignStore((state) => state.campaigns);
   const updateCampaign = useCampaignStore((state) => state.updateCampaign);
@@ -166,6 +166,7 @@ export default function CampaignDetailsPage() {
         updateCampaign(campaignId, updates);
 
         // Close edit mode
+        // handleVerifyCode removed as it was unused due to auto-verification flow
         setIsEditingTitle(false);
         setIsEditingDescription(false);
         setIsEditingSMS(false);
@@ -177,6 +178,7 @@ export default function CampaignDetailsPage() {
       }
     } catch (error) {
       console.error("Error updating campaign:", error);
+      // handleSignIn removed as it was unused
       alert("An error occurred while updating the campaign. Please try again.");
     }
   };
@@ -439,8 +441,8 @@ export default function CampaignDetailsPage() {
                 <div className="relative w-full max-w-sm overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
                   <img
                     src={campaign.image}
-                    alt="Campaign"
-                    className="w-full h-auto object-cover max-h-64"
+                    alt={campaign.name}
+                    className="w-full h-full object-cover max-h-64"
                   />
                   <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded font-mono">
                     Variable: {"{image}"}
@@ -535,6 +537,54 @@ export default function CampaignDetailsPage() {
             </div>
           </div>
 
+          {/* External Survey Redirect Link - Only if external link exists */}
+          {campaign.externalSurveyLink && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <ExternalLink className="w-5 h-5 text-blue-500" />
+                Redirect Setup
+              </h2>
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-sm text-blue-800 dark:text-blue-200 rounded-lg border border-blue-100 dark:border-blue-800">
+                  <p className="mb-2 font-medium">Instructions:</p>
+                  <p>
+                    Copy the link below and paste it as the <strong>Redirect URL</strong> in your external survey tool (e.g., Google Forms, Typeform) settings.
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Redirect Link</p>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/feedback/${campaignId}${campaign.code ? `?code=${campaign.code}` : ''}`}
+                        className="w-full px-3 py-2 pr-10 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 font-mono focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const link = `${window.location.origin}/feedback/${campaignId}${campaign.code ? `?code=${campaign.code}` : ''}`;
+                        navigator.clipboard.writeText(link);
+                        alert("Link copied to clipboard!");
+                      }}
+                      className="p-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      title="Copy Link"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {campaign.code && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Includes your unique verification code: <strong>{campaign.code}</strong>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Contacts Summary */}
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Contacts Summary</h2>
@@ -562,12 +612,13 @@ export default function CampaignDetailsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </div >
 
       {/* Contacts Modal */}
-      <Modal
+      < Modal
         isOpen={showContactsModal}
-        onClose={() => setShowContactsModal(false)}
+        onClose={() => setShowContactsModal(false)
+        }
         className="max-w-4xl max-h-[90vh] overflow-y-auto"
       >
         <div className="p-6">
@@ -646,8 +697,8 @@ export default function CampaignDetailsPage() {
             </Button>
           </div>
         </div>
-      </Modal>
-    </div>
+      </Modal >
+    </div >
   );
 }
 

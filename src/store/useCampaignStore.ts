@@ -27,11 +27,13 @@ export interface Campaign {
 	reward?: Reward;
 	survey?: string; // Survey ID
 	user: string; // User ID
-    responses: number;
+	responses: number;
 	createdAt?: string;
 	updatedAt?: string;
 	status: string;
 	image?: string;
+	externalSurveyLink?: string;
+	code?: string;
 }
 
 type CampaignsState = {
@@ -105,7 +107,7 @@ export const useCampaignStore = create<CampaignsState & CampaignsActions>((set) 
 				if (c._id === campaignId || c.id === campaignId) {
 					const reward = c.reward;
 					if (!reward) return c;
-					
+
 					if (rewardType === "cash reward" && reward.amount) {
 						return {
 							...c,
