@@ -12,6 +12,8 @@ import { useCustomerStore } from "@/store/useCustomerStore";
 import { useSession } from "next-auth/react";
 import { SessionUser } from "@/types/session";
 import * as XLSX from "xlsx";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface CustomerDisplay {
   id: string;
@@ -316,36 +318,16 @@ export function CreateCampaignDialog() {
 
     setIsUploadingImage(true);
     try {
-      // In a real scenario, you would upload to Cloudinary, S3, or your backend
-      // For now, we'll use a mock upload or a common backend endpoint if available
-      const formData = new FormData();
-      formData.append("file", file);
+      // Upload to Firebase Storage
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storageRef = ref(storage, `campaign-images/${timestamp}_${safeName}`);
 
-      // We call our internal Next.js API route which handles the Cloudflare upload securely
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
 
-      if (response.ok) {
-        const data = await response.json();
-        const imageUrl = data.url;
-        if (imageUrl) {
-          setCampaignData(prev => ({ ...prev, image: imageUrl }));
-          showMessage("success", "Image Uploaded", "Image uploaded successfully to Cloudflare!");
-        } else {
-          throw new Error("Invalid response from server");
-        }
-      } else {
-        // Fallback for demo: use Base64 if backend upload fails or doesn't exist
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          setCampaignData(prev => ({ ...prev, image: base64String }));
-          // Removed info message as requested
-        };
-        reader.readAsDataURL(file);
-      }
+      setCampaignData(prev => ({ ...prev, image: downloadURL }));
+      showMessage("success", "Image Uploaded", "Image uploaded successfully!");
     } catch (error) {
       console.error("Error uploading image:", error);
       showMessage("error", "Upload Failed", "Failed to upload image. Please try again.");
