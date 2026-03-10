@@ -44,6 +44,7 @@ export function CreateCampaignDialog() {
   const closeMessage = () => {
     setMessageModal({ ...messageModal, isOpen: false });
   };
+  const [externalSetupDetails, setExternalSetupDetails] = useState<{ isOpen: boolean; campaignId: string; code: string } | null>(null);
   const [campaignData, setCampaignData] = useState({
     name: "",
     description: "",
@@ -506,6 +507,19 @@ export function CreateCampaignDialog() {
         }
       }
 
+      // Replace variables with actual data before sending to backend
+      const rewardString = campaignData.rewardType === "cash"
+        ? `$${campaignData.rewardValue} cash reward`
+        : (campaignData.rewardType === "promo" ? `Promo Code: ${campaignData.rewardValue}` : "");
+
+      const surveyLink = `${typeof window !== "undefined" ? window.location.origin : ""}/feedback/pending`;
+
+      const finalMessageTemplate = (campaignData.smsTemplate || "")
+        .replace(/{campaignName}/g, campaignData.name)
+        .replace(/{reward}/g, rewardString)
+        .replace(/{link}/g, surveyLink)
+        .replace(/{image}/g, campaignData.image || "");
+
       // Prepare request body with contacts (full JSON objects)
       const requestBody: {
         userId: string;
@@ -527,7 +541,7 @@ export function CreateCampaignDialog() {
         userId: userId,
         name: campaignData.name,
         description: campaignData.description || "",
-        message_template: campaignData.smsTemplate || "",
+        message_template: finalMessageTemplate,
         contacts: contacts, // Send full contact objects
         reward: reward,
         image: campaignData.image || ""
@@ -588,10 +602,18 @@ export function CreateCampaignDialog() {
         });
       }
 
-      setIsOpen(false);
-
-      // Redirect to campaigns list and reload the whole page
-      window.location.href = "/campaign";
+      if (campaignData.surveyType === "external") {
+        setExternalSetupDetails({
+          isOpen: true,
+          campaignId: createdCampaign._id || createdCampaign.id,
+          code: campaignData.externalSurveyCode
+        });
+        setIsOpen(false);
+      } else {
+        setIsOpen(false);
+        // Redirect to campaigns list and reload the whole page
+        window.location.href = "/campaign";
+      }
 
       // Reset form
       setCampaignData({
@@ -1049,7 +1071,7 @@ export function CreateCampaignDialog() {
                       <Label htmlFor="sms-template">Message Template</Label>
                       <textarea
                         id="sms-template"
-                        placeholder="Hi {name}! We'd love your feedback on our recent service. Complete our quick survey and get {reward}! Click here: {link}"
+                        placeholder="Hi {campaignName}! We'd love your feedback on our recent service. Complete our quick survey and get {reward}! Click here: {link}"
                         value={campaignData.smsTemplate}
                         onChange={(e) => setCampaignData(prev => ({ ...prev, smsTemplate: e.target.value }))}
                         rows={6}
@@ -1057,7 +1079,7 @@ export function CreateCampaignDialog() {
                       />
                       <div className="mt-2 space-x-2">
                         <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800">
-                          {"{name}"}
+                          {"{campaignName}"}
                         </span>
                         <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800">
                           {"{reward}"}
@@ -1164,8 +1186,8 @@ export function CreateCampaignDialog() {
                   <p className="text-sm font-mono bg-white dark:bg-gray-800 p-3 rounded border text-gray-900 dark:text-white">
                     {campaignData.smsTemplate
                       ? campaignData.smsTemplate
-                        .replace("{name}", "John Doe")
-                        .replace("{reward}", "$5 cash reward")
+                        .replace("{campaignName}", campaignData.name || "Campaign")
+                        .replace("{reward}", campaignData.rewardType === "cash" ? `$${campaignData.rewardValue} cash reward` : (campaignData.rewardValue || "reward"))
                         .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`)
                         .replace("{image}", campaignData.image ? "[Link to your image]" : "[Image link]")
                       : "Your personalized SMS message will appear here..."}
@@ -1173,8 +1195,8 @@ export function CreateCampaignDialog() {
                   <p className="text-xs text-gray-500 mt-2">
                     Final character count: {campaignData.smsTemplate
                       ? campaignData.smsTemplate
-                        .replace("{name}", "John Doe")
-                        .replace("{reward}", "$5 cash reward")
+                        .replace("{campaignName}", campaignData.name || "Campaign")
+                        .replace("{reward}", campaignData.rewardType === "cash" ? `$${campaignData.rewardValue} cash reward` : (campaignData.rewardValue || "reward"))
                         .replace("{link}", `yourdomain.com/s/${campaignData.selectedSurveyId ? (surveys.find(s => (s._id || s.id) === campaignData.selectedSurveyId)?.title?.substring(0, 6) || 'survey') : 'survey'}`)
                         .replace("{image}", campaignData.image ? "https://cdn.link/img.jpg" : "https://cdn.link/img.jpg").length
                       : 0}/160
@@ -1937,6 +1959,71 @@ export function CreateCampaignDialog() {
           </div>
         </div>
       </Modal>
+
+      {/* External Survey Setup Guide Modal */}
+      {externalSetupDetails && (
+        <Modal
+          isOpen={externalSetupDetails.isOpen}
+          onClose={() => {
+            setExternalSetupDetails(null);
+            window.location.href = "/campaign";
+          }}
+          className="max-w-2xl"
+        >
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 dark:bg-green-900/30 dark:text-green-400">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Campaign Created!</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Next step: Configure your external survey</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-5 border border-blue-100 dark:border-blue-800">
+                <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
+                  <Info className="w-5 h-5" />
+                  Redirect Link Setup
+                </h3>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-4 leading-relaxed">
+                  To ensure your customers can claim their rewards after finishing the survey, you must set up this exact Redirect Link (or &quot;Finish Page&quot; URL) in your survey provider.
+                </p>
+
+                <div className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-lg p-4 font-mono text-sm break-all text-gray-800 dark:text-gray-200 select-all shadow-sm">
+                  {`${typeof window !== 'undefined' ? window.location.origin : ''}/feedback/${externalSetupDetails.campaignId}?code=${externalSetupDetails.code}`}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-5 border border-gray-200 dark:border-gray-700">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-theme-purple-500" />
+                  Quick Reference Guide
+                </h4>
+                <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                  <li className="flex gap-2"><span className="text-theme-purple-500">•</span> <strong>Typeform:</strong> Go to Settings &gt; Redirect on completion</li>
+                  <li className="flex gap-2"><span className="text-theme-purple-500">•</span> <strong>SurveyMonkey:</strong> Go to Collect Responses &gt; Survey End Page &gt; Custom URL</li>
+                  <li className="flex gap-2"><span className="text-theme-purple-500">•</span> <strong>Fillout:</strong> Go to Settings &gt; Redirect on submit</li>
+                  <li className="flex gap-2"><span className="text-theme-purple-500">•</span> <strong>Google Forms:</strong> (Does not natively support automatic redirect - configure manual confirmation link)</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <Button
+                onClick={() => {
+                  setExternalSetupDetails(null);
+                  window.location.href = "/campaign";
+                }}
+                className="bg-gradient-to-r from-theme-purple-500 to-theme-purple-600 hover:from-theme-purple-600 hover:to-theme-purple-700"
+              >
+                I&apos;ve Saved the Link - Finish
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

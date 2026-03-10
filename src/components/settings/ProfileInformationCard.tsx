@@ -34,7 +34,7 @@ export default function ProfileInformationCard() {
         console.error("No user id found in session");
         return;
       }
-      const baseUrl = process.env.BACKEND_URL || "http://localhost:5000";
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
       if (!baseUrl) {
         console.error("Missing NEXT_PUBLIC_API_BASE_URL/BACKEND_URL. Set it to your Express origin, e.g., http://localhost:3001");
         return;
@@ -166,34 +166,34 @@ export default function ProfileInformationCard() {
               <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
                 <div>
                   <Label>First Name</Label>
-                  <Input 
-                    type="text" 
-                    defaultValue={session?.user?.name?.split(" ")[0] || "John"} 
+                  <Input
+                    type="text"
+                    defaultValue={session?.user?.name?.split(" ")[0] || "John"}
                     disabled={true}
                   />
                 </div>
 
                 <div>
                   <Label>Last Name</Label>
-                  <Input 
-                    type="text" 
-                    defaultValue={session?.user?.name?.split(" ")[session?.user?.name?.split(" ").length - 1] || "Doe"} 
+                  <Input
+                    type="text"
+                    defaultValue={session?.user?.name?.split(" ")[session?.user?.name?.split(" ").length - 1] || "Doe"}
                     disabled={true}
                   />
                 </div>
 
                 <div>
                   <Label>Email Address</Label>
-                  <Input 
-                    type="email" 
-                    defaultValue={session?.user?.email || "john@company.com"} 
+                  <Input
+                    type="email"
+                    defaultValue={session?.user?.email || "john@company.com"}
                     disabled={true}
                   />
                 </div>
 
                 <div>
                   <Label>Company Name</Label>
-                  <Input type="text" defaultValue={companyName} onChange={(e) => setCompanyName(e.target.value)} />  
+                  <Input type="text" defaultValue={companyName} onChange={(e) => setCompanyName(e.target.value)} />
                 </div>
 
                 <div className="col-span-2">

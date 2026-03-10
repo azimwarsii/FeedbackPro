@@ -1079,6 +1079,16 @@ export default function FeedbackPage() {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {survey?.thankYouMessage || "Your response has been recorded successfully."}
           </p>
+          {mobileVerified && campaign?.reward && (
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="font-semibold text-green-800 dark:text-green-200">Reward Claimed!</p>
+              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                {campaign.reward.type === "cash reward"
+                  ? "The reward will be sent to your bank within 3-4 days."
+                  : "You will receive the reward promo code on your phone number."}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1160,7 +1170,13 @@ export default function FeedbackPage() {
           {mobileVerified && (
             <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
               <p className="font-semibold text-green-800 dark:text-green-200">Reward Claimed!</p>
-              <p className="text-sm text-green-700 dark:text-green-300">Your number has been verified.</p>
+              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                {campaign?.reward?.type === "cash reward"
+                  ? "The reward will be sent to your bank within 3-4 days."
+                  : campaign?.reward?.type === "promo code"
+                    ? "You will receive the reward promo code on your phone number."
+                    : "Your number has been verified."}
+              </p>
             </div>
           )}
         </div>

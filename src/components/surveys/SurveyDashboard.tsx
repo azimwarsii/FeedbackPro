@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  Plus, 
-  MoreHorizontal, 
-  Edit, 
-  BarChart3, 
-  Trash2, 
+  Plus,
+  MoreHorizontal,
+  Edit,
+  BarChart3,
+  Trash2,
   Play,
   Pause,
   CheckCircle,
@@ -23,7 +23,7 @@ import { useSession } from "next-auth/react";
 import SurveyResponsesModal from "@/components/surveys/SurveyResponsesModal";
 
 type SurveyStatus = "Active" | "Paused" | "Completed" | "Draft";
-type SurveyType = "Product Feedback" | "Customer Satisfaction" | "Market Research" ;
+type SurveyType = "Product Feedback" | "Customer Satisfaction" | "Market Research";
 
 interface Survey {
   id: string;
@@ -128,13 +128,13 @@ export default function Surveys() {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       let clickedInsideMenu = false;
-      
+
       menuRefs.current.forEach((menuElement) => {
         if (menuElement && menuElement.contains(target)) {
           clickedInsideMenu = true;
         }
       });
-      
+
       if (!clickedInsideMenu) {
         setOpenMenuId(null);
       }
@@ -152,17 +152,16 @@ export default function Surveys() {
   };
 
   const handleDeleteSurvey = async (survey: Survey) => {
-    const idForDeletion =  survey.id;
+    const idForDeletion = survey.id;
     if (!idForDeletion) return;
 
     const confirmDelete = window.confirm("Are you sure you want to delete this survey?");
     if (!confirmDelete) return;
 
     const baseUrl =
-      process.env.BACKEND_URL || "http://localhost:5000";
-    const endpoint = `${baseUrl.replace(/\/+$/, "")}/surveys/${idForDeletion}${
-      userId ? `?userId=${encodeURIComponent(userId)}` : ""
-    }`;
+      process.env.NEXT_PUBLIC_API_BASE_URL || process.env.BACKEND_URL || "http://localhost:5000";
+    const endpoint = `${baseUrl.replace(/\/+$/, "")}/surveys/${idForDeletion}${userId ? `?userId=${encodeURIComponent(userId)}` : ""
+      }`;
 
     try {
       const res = await fetch(endpoint, {
@@ -188,7 +187,7 @@ export default function Surveys() {
     if (event) {
       event.stopPropagation();
     }
-    
+
     if (action === "Delete") {
       setOpenMenuId(null); // Close menu first
       // Use setTimeout to ensure menu closes before confirmation dialog
@@ -206,10 +205,10 @@ export default function Surveys() {
       const questionsArray = Array.isArray(survey.questions) ? survey.questions : [];
       const createdDate = survey.createdAt
         ? new Date(survey.createdAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
         : "Unknown";
       const type = mapGoalToType(survey.goal);
       const status = mapStatus(survey.status);
@@ -232,7 +231,7 @@ export default function Surveys() {
 
   const filteredSurveys = normalizedSurveys.filter((survey) => {
     const matchesSearch = survey.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         survey.description.toLowerCase().includes(searchTerm.toLowerCase());
+      survey.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "All Status" || survey.status === statusFilter;
     const matchesType = typeFilter === "All Types" || survey.type === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
@@ -240,7 +239,7 @@ export default function Surveys() {
 
   const getStatusBadge = (status: SurveyStatus) => {
     const baseClasses = "inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full";
-    
+
     switch (status) {
       case "Active":
         return (
@@ -346,7 +345,7 @@ export default function Surveys() {
               <span className="sm:hidden">Export</span>
             </button> */}
           </div>
-          <button 
+          <button
             onClick={() => window.location.href = '/create'}
             className="inline-flex items-center justify-center gap-1 sm:gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-500 to-purple-700 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl text-sm sm:text-base"
           >
@@ -363,12 +362,12 @@ export default function Surveys() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Quick Start Templates</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">Get started quickly with pre-built survey templates</p>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {quickStartTemplates.map((template) => (
             <button
               key={template.id}
-              onClick={() => window.location.href = '/create?template='+template.id}
+              onClick={() => window.location.href = '/create?template=' + template.id}
               className={`group relative overflow-hidden rounded-xl border border-gray-200 ${getTemplateColor(template.color)} p-6 shadow-sm transition-all hover:shadow-md dark:border-gray-700 hover:scale-105`}
             >
               <div className="flex items-center justify-between">
@@ -414,7 +413,7 @@ export default function Surveys() {
               className="w-full pl-4 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white transition-colors"
             />
           </div>
-          
+
           <div className="flex gap-3">
             <select
               value={statusFilter}
@@ -445,12 +444,12 @@ export default function Surveys() {
       {/* Survey Cards Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {filteredSurveys.map((survey) => (
-          <div 
-            key={survey.id} 
+          <div
+            key={survey.id}
             className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-300 dark:border-gray-700 dark:bg-gray-800 hover:scale-[1.02]"
           >
             {/* Menu Button */}
-            <div 
+            <div
               className="absolute top-4 right-4"
               ref={(el) => {
                 if (el) {
@@ -460,13 +459,13 @@ export default function Surveys() {
                 }
               }}
             >
-              <button 
+              <button
                 onClick={(e) => handleMenuClick(survey.id, e)}
                 className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 opacity-0 group-hover:opacity-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
-              
+
               {/* Dropdown Menu */}
               {openMenuId === survey.id && (
                 <div className="absolute right-0 top-8 z-50 w-48 rounded-lg border border-gray-200 bg-white py-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
@@ -548,7 +547,7 @@ export default function Surveys() {
 
             {/* Action Buttons */}
             <div className="flex gap-2">
-              <button 
+              <button
                 onClick={() => window.location.href = `/create/${(survey as { originalId?: string }).originalId || survey.id}`}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
