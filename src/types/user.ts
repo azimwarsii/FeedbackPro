@@ -3,6 +3,7 @@ export interface FetchedUser {
 	id?: string;
 	email?: string;
 	name?: string;
+	role?: "admin" | "user" | string;
 	companyName?: string;
 	bio?: string;
 	createdAt?: string;

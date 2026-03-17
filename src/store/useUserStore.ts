@@ -4,6 +4,7 @@ export type UserState = {
 	id?: string;
 	name?: string;
 	email?: string;
+	role?: "admin" | "user" | string;
 	companyName?: string;
 	bio?: string;
 };
@@ -18,6 +19,7 @@ export const useUserStore = create<UserState & UserActions>((set) => ({
 	id: undefined,
 	name: undefined,
 	email: undefined,
+	role: undefined,
 	companyName: undefined,
 	bio: undefined,
 	setUser: (user) => set(() => ({ ...user })),
@@ -32,6 +34,7 @@ export const useUserStore = create<UserState & UserActions>((set) => ({
 			id: undefined,
 			name: undefined,
 			email: undefined,
+			role: undefined,
 			companyName: undefined,
 			bio: undefined,
 		})),

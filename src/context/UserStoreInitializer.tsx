@@ -39,6 +39,7 @@ export default function UserStoreInitializer() {
 					id,
 					name: safeUser?.name ?? undefined,
 					email: email || undefined,
+					role: fetchedUser?.role ?? undefined,
 					companyName: fetchedUser?.companyName ?? undefined,
 					bio: fetchedUser?.bio ?? undefined,
 				});
